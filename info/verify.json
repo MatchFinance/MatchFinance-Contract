@@ -1,0 +1,43 @@
+{
+	"sepolia": {
+		"MatchPool": {
+			"address": "0xdb07321E54BD3bE96b93dB005CfF9FF3D4e2c22B",
+			"args": []
+		},
+		"LPToken": {
+			"address": "0x8a95c53496fB5808db8c47c3Dc4a673796636915",
+			"args": []
+		},
+		"StakePool": {
+			"address": "0x87D4938b55331E86aB2BaadeeC7f01592482Cb23",
+			"args": [
+				"0x8a95c53496fB5808db8c47c3Dc4a673796636915"
+			]
+		},
+		"EUSDMock": {
+			"address": "0xDA12dC8EaFdd953006668Bb3f9Da07A2D724A5a5",
+			"args": [
+				"0x0000000000000000000000000000000000000000"
+			]
+		},
+		"stETHMock": {
+			"address": "0xe229138876201677763d25909EfAB95c898FcD5a",
+			"args": []
+		},
+		"LPOracle": {
+			"address": "0xAce1a5981aFbb6d9488f1C2aC732f7eDC87CA949",
+			"args": []
+		},
+		"LybraConfigurator": {
+			"address": "0x6734af5595774A8422d412D74EC2c10FA91BEAC0",
+			"args": []
+		},
+		"LybraMintPool": {
+			"address": "0xcF949559EaF14972C30874A187b49b27988034f3",
+			"args": [
+				"0xe229138876201677763d25909EfAB95c898FcD5a",
+				"0xDA12dC8EaFdd953006668Bb3f9Da07A2D724A5a5"
+			]
+		}
+	}
+}
