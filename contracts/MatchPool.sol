@@ -214,8 +214,10 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     // Stake LBR-ETH LP token
     function stakeLP(uint256 _amount) external {
         ethlbrLpToken.safeTransferFrom(msg.sender, address(this), _amount);
+
         uint256 allowance = ethlbrLpToken.allowance(address(this), address(ethlbrStakePool));
         if (allowance < _amount) ethlbrLpToken.approve(address(ethlbrStakePool), type(uint256).max);
+
         ethlbrStakePool.stake(_amount);
         totalStaked += _amount;
         staked[msg.sender] += _amount;
@@ -631,6 +633,11 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     // Lybra restricts deposits with a min. amount of 1 stETH
     function _depositToLybra(uint256 _amount, uint256 _eUSDMintAmount) private {
         if (_amount < 1 ether) revert MinLybraDeposit();
+
+        IERC20 stETH = IERC20(mintPool.getAsset());
+        uint256 allowance = stETH.allowance(address(this), address(mintPool));
+        if (allowance < _amount) stETH.approve(address(mintPool), type(uint256).max);
+
         mintPool.depositAssetToMint(_amount, _eUSDMintAmount);
         totalDeposited += _amount;
         if (_eUSDMintAmount > 0) totalMinted += _eUSDMintAmount;
