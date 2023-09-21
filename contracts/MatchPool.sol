@@ -779,7 +779,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         }
 
         // Amount to deposit for 200% colalteral ratio given that { mintAmountGivenDlp } eUSD will be minted
-        calc.amountToDeposit = _getDepositAmountDelta(_depositedAmount, calc.mintAmountGivenDlp);
+        calc.amountToDeposit = _getDepositAmountDelta(_depositedAmount, _mintedAmount + calc.mintAmountGivenDlp);
         // Accept over-collateralization, i.e. deposit at least 1 ether
         _depositToLybra(_max(calc.amountToDeposit, 1 ether), calc.mintAmountGivenDlp);
         // Result: dlp ratio = 6%, collateral ratio >= 200%
