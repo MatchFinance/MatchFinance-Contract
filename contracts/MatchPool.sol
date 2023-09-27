@@ -306,7 +306,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     function withdrawStETH(uint256 _amount) external {
         uint256 borrowedEUSD = borrowed[msg.sender].principal;
         uint256 withdrawable = borrowedEUSD > 0 ?
-            (supplied[msg.sender] - borrowedEUSD * collateralRatioIdeal / maxBorrowRatio) 
+            supplied[msg.sender] - borrowedEUSD * collateralRatioIdeal / maxBorrowRatio
                 * 1e18 / mintPool.getAssetPrice() : supplied[msg.sender];
 
         if (_amount > withdrawable) revert ExceedAmountAllowed(_amount, withdrawable);
@@ -385,7 +385,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
     function repayEUSD(address _account, uint256 _amount) public {
         uint256 oldBorrowAmount = borrowed[_account].principal;
-        uint256 newAccInterest = borrowed[_account].accInterest + _getAccInterest(msg.sender);
+        uint256 newAccInterest = borrowed[_account].accInterest + _getAccInterest(_account);
         IERC20 eUSD = IERC20(lybraConfigurator.getEUSDAddress());
 
         // Just repaying interest
@@ -667,9 +667,9 @@ contract MatchPool is Initializable, OwnableUpgradeable {
      *  1st condition -> deposit amount, 2nd condition -> withdraw amount
      */
     function _getDepositAmountDelta(uint256 _depositedAmount, uint256 _mintedAmount) private view returns (uint256) {
-        uint256 newDepositedAmount = collateralRatioIdeal * _mintedAmount / (mintPool.getAssetPrice() * 100); 
+        uint256 newDepositedAmount = collateralRatioIdeal * _mintedAmount / mintPool.getAssetPrice() / 100; 
         return newDepositedAmount > _depositedAmount ?
-            newDepositedAmount - _depositedAmount : _depositedAmount - newDepositedAmount;
+            newDepositedAmount - _depositedAmount + 1 : _depositedAmount - newDepositedAmount;
     }
 
     /**
