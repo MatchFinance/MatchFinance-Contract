@@ -32,6 +32,20 @@ task("deploy:LPOracle", "Deploy mock ETH-LBR LP token oracle")
     writeDeployment(network, "LPOracle", oracle.address, []);
   });
 
+task("deploy:LBROracle", "Deploy mock LBR token oracle")
+  .setAction(async function (_, { ethers, upgrades }) {
+    const hre = require("hardhat");
+    const network = getNetwork();
+
+    console.log("Deploying...");
+
+    const oracle = await deploy(ethers, "LBROracle", []);
+
+    console.log(`LBR token oracle deployed to: ${oracle.address} on ${network}`);
+
+    writeDeployment(network, "LBROracle", oracle.address, []);
+  });
+
 task("deploy:StakePool", "Deploy mock Lybra stake pool contract")
   .setAction(async function (_, { ethers, upgrades }) {
     const hre = require("hardhat");
@@ -55,11 +69,12 @@ task("deploy:Configurator", "Deploy mock Lybra configurator contract")
 
     console.log("Deploying...");
 
-    const configurator = await deploy(ethers, "LybraConfigurator", []);
+    const args = [readAddressList()[network].EUSDMock];
+    const configurator = await deploy(ethers, "LybraConfigurator", args);
 
     console.log(`Lybra configurator deployed to: ${configurator.address} on ${network}`);
 
-    writeDeployment(network, "LybraConfigurator", configurator.address, []);
+    writeDeployment(network, "LybraConfigurator", configurator.address, args);
   });
 
 task("deploy:MintPool", "Deploy mock Lybra stETH mint pool contract")
@@ -96,13 +111,12 @@ task("deploy:stETH", "Deploy mock stETH token")
   });
 
 task("deploy:eUSD", "Deploy mock Lybra eUSD contract")
-  .setAction(async function (_, { ethers, upgrades }) {
+  .setAction(async function (_, { ethers }) {
     const hre = require("hardhat");
     const network = getNetwork();
 
     console.log("Deploying...");
 
-    // const args = [readAddressList()[network]["LPToken"]];
     const args = ["0x0000000000000000000000000000000000000000"];
 
     const token = await deploy(ethers, "EUSDMock", args);
@@ -110,6 +124,23 @@ task("deploy:eUSD", "Deploy mock Lybra eUSD contract")
     console.log(`eUSD deployed to: ${token.address} on ${network}`);
 
     writeDeployment(network, "EUSDMock", token.address, args);
+  });
+
+task("deploy:Mining", "Deploy mock Lybra mining incentive contract")
+  .setAction(async function (_, { ethers }) {
+    const hre = require("hardhat");
+    const network = getNetwork();
+    const addressList = readAddressList()[network];
+
+    console.log("Deploying...");
+
+    const args = [addressList.LybraConfigurator, addressList.LPOracle, addressList.LBROracle];
+
+    const mining = await deploy(ethers, "MiningIncentive", args);
+
+    console.log(`Lybra mining incentive deployed to: ${mining.address} on ${network}`);
+
+    writeDeployment(network, "MiningIncentive", mining.address, args);
   });
 
 

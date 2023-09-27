@@ -6,9 +6,14 @@ declare module "mocha" {
   export interface Context {
     loadFixture: <T>(fixture: Fixture<T>) => Promise<T>;
     signers: Signers;
+    matchPool: MatchPool;
+    stakePool: StakePool;
+    mintPool: MintPool;
+    stETH: stETHMock;
   }
 }
 
 export interface Signers {
   admin: SignerWithAddress;
+  bob: SignerWithAddress;
 }

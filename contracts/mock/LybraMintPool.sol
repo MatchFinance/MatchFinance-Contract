@@ -71,7 +71,7 @@ contract LybraMintPool is Ownable {
     uint256 poolTotalCirculation;
 
     mapping(address => uint256) public depositedAsset;
-    mapping(address => uint256) borrowed;
+    mapping(address => uint256) public borrowed;
     uint256 public feeStored;
     mapping(address => uint256) depositedTime;
 
@@ -361,8 +361,8 @@ contract LybraMintPool is Ownable {
     /**
      * @dev Return USD value of current ETH through Liquity PriceFeed Contract.
      */
-    function _etherPrice() internal returns (uint256) {
-        return 1600e18;
+    function _etherPrice() internal view returns (uint256) {
+        return etherPrice;
     }
 
     function getBorrowedOf(address user) external view returns (uint256) {
@@ -381,7 +381,7 @@ contract LybraMintPool is Ownable {
         return 0;
     }
 
-    function getAssetPrice() public returns (uint256) {
+    function getAssetPrice() public view returns (uint256) {
         return _etherPrice();
     }
     // function getAsset2EtherExchangeRate() external view virtual returns (uint256);

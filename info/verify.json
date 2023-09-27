@@ -1,7 +1,7 @@
 {
 	"sepolia": {
 		"MatchPool": {
-			"address": "0xdb07321E54BD3bE96b93dB005CfF9FF3D4e2c22B",
+			"address": "0x25df44328dbcba6e21bfb94fd0180521ddc73c39",
 			"args": []
 		},
 		"LPToken": {
@@ -29,14 +29,34 @@
 			"args": []
 		},
 		"LybraConfigurator": {
-			"address": "0x6734af5595774A8422d412D74EC2c10FA91BEAC0",
-			"args": []
+			"address": "0x9062467603aDC1ecde903b43D058f445B925ba4e",
+			"args": [
+				"0xDA12dC8EaFdd953006668Bb3f9Da07A2D724A5a5"
+			]
 		},
 		"LybraMintPool": {
 			"address": "0xcF949559EaF14972C30874A187b49b27988034f3",
 			"args": [
 				"0xe229138876201677763d25909EfAB95c898FcD5a",
 				"0xDA12dC8EaFdd953006668Bb3f9Da07A2D724A5a5"
+			]
+		},
+		"RewardManager": {
+			"address": "0x1A389Fa735a001a4F42f241007150e660d166f5a",
+			"args": [
+				"0x0B170A1A4043b45699eaf9e60092D8ad918b84C0"
+			]
+		},
+		"LBROracle": {
+			"address": "0xB039Ba37393a8412c7Ee2ecB43976a1CCeD8e242",
+			"args": []
+		},
+		"MiningIncentive": {
+			"address": "0x5Aa76412972689DFdcDE1b6cc6843B069D71772a",
+			"args": [
+				"0x9062467603aDC1ecde903b43D058f445B925ba4e",
+				"0xAce1a5981aFbb6d9488f1C2aC732f7eDC87CA949",
+				"0xB039Ba37393a8412c7Ee2ecB43976a1CCeD8e242"
 			]
 		}
 	}
