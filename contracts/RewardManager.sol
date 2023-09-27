@@ -57,6 +57,11 @@ contract RewardManager is Ownable {
 
 	IERC20Mintable public mesLBR;
 
+	// Mining reward share, out of 100
+	uint128 treasuryShare = 10;
+	uint128 stakerShare = 10;
+
+	event RewardShareChanged(uint128 newTreasuryShare, uint128 newStakerShare);
 	event DLPRewardClaimed(address account, uint256 rewardAmount);
 	event LSDRewardClaimed(address account, uint256 rewardAmount);
 	event eUSDRewardClaimed(address account, uint256 rewardAmount);
@@ -106,6 +111,13 @@ contract RewardManager is Ownable {
 	function setMesLBR(address _mesLBR) external onlyOwner {
 		mesLBR = IERC20Mintable(_mesLBR);
 	}
+
+	function setMiningRewardShares(uint128 _treasuryShare, uint128 _stakerShare) external onlyOwner {
+		treasuryShare = _treasuryShare;
+		stakerShare = _stakerShare;
+
+		emit RewardShareChanged(_treasuryShare, _stakerShare);
+	}
 	
 	// Update rewards for dlp stakers, includes esLBR from dlp and eUSD
 	function dlpUpdateReward(address _account) public {
@@ -119,10 +131,10 @@ contract RewardManager is Ownable {
 		(uint256 lsdEarned, uint256 lsdRpt) = earnedSinceLastUpdate(_lsdRewardPool);
 		rewardPerTokenPaid[_lsdRewardPool] = lsdRpt;
 
-		uint256 toTreasury = lsdEarned * 10 / 100;
+		uint256 toTreasury = lsdEarned * treasuryShare / 100;
 		userRewards[_lsdRewardPool][treasury] += toTreasury;
 		// esLBR reward from mining incentive given to dlp stakers
-		uint256 toStaker = lsdEarned * 20 / 100;
+		uint256 toStaker = lsdEarned * stakerShare / 100;
 		// esLBR reward from mining incentive given to stETH suppliers
 		uint256 toSupplier = lsdEarned - toTreasury - toStaker;
 
@@ -147,10 +159,10 @@ contract RewardManager is Ownable {
 		(uint256 lsdEarned, uint256 rpt) = earnedSinceLastUpdate(_lsdRewardPool);
 		rewardPerTokenPaid[_lsdRewardPool] = rpt;
 
-		uint256 toTreasury = lsdEarned * 10 / 100;
+		uint256 toTreasury = lsdEarned * treasuryShare / 100;
 		userRewards[_lsdRewardPool][treasury] += toTreasury;
 		// esLBR reward from mining incentive given to dlp stakers
-		uint256 toStaker = lsdEarned * 20 / 100;
+		uint256 toStaker = lsdEarned * stakerShare / 100;
 		// esLBR reward from mining incentive given to stETH suppliers
 		uint256 toSupplier = lsdEarned - toTreasury - toStaker;
 
