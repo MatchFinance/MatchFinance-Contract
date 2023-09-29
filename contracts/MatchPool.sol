@@ -8,37 +8,9 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
-interface ILido {
-    function submit(address _referral) external payable returns (uint256 StETH);
-}
-
-interface IStakePool {
-    function stake(uint256 _amount) external;
-    function withdraw(uint256 _amount) external;
-}
-
-interface IMintPool {
-    function getAsset() external view returns(address);
-    function depositAssetToMint(uint256 assetAmount, uint256 mintAmount) external;
-    function depositedAsset(address _user) external view returns (uint256);
-    // Price of stETH, scaled in 1e18
-    function getAssetPrice() external view returns (uint256);
-    function withdraw(address onBehalfOf, uint256 amount) external;
-    function mint(address onBehalfOf, uint256 amount) external;
-    function burn(address onBehalfOf, uint256 amount) external;
-    function checkWithdrawal(address user, uint256 amount) external view returns (uint256 withdrawal);
-}
-
-interface IConfigurator {
-    function getVaultWeight(address pool) external view returns (uint256);
-    function getEUSDAddress() external view returns (address);
-}
-
-interface IRewardManager {
-    function dlpUpdateReward(address _account) external;
-    function lsdUpdateReward(address _account) external;
-    function treasury() external view returns (address);
-}
+import "./interfaces/LybraInterfaces.sol";
+import "./interfaces/DappInterfaces.sol";
+import "./interfaces/IRewardManager.sol";
 
 error ExceedAmountAllowed(uint256 _desired, uint256 _actual);
 // Insufficient collateral to maintain 200% ratio

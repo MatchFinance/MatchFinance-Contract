@@ -5,24 +5,8 @@ pragma solidity ^0.8.19;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-interface IMatchPool {
-	// Total amount of ETH-LBR staked
-	function totalStaked() external view returns (uint256);
-	function staked(address _user) external view returns (uint256);
-	// Total amount of stETH deposited to contract
-	function totalSupplied() external view returns (uint256);
-	function supplied(address _user) external view returns (uint256);
-	function totalMinted() external view returns (uint256);
-	function claimRebase() external returns (uint256);
-	function borrowed(address _account) external view returns (uint256, uint256, uint256, uint256);
-}
-
-interface IRewardPool {
-	function stakedOf(address user) external view returns (uint256);
-	function balanceOf(address user) external view returns (uint256);
-	function getBoost(address _account) external view returns (uint256);
-	function rewardPerToken() external view returns (uint256);
-}
+import "./interfaces/LybraInterfaces.sol";
+import "./interfaces/IMatchPool.sol";
 
 interface IERC20Mintable {
 	function mint(address _to, uint256 _amount) external;

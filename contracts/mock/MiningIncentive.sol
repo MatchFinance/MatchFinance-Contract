@@ -9,18 +9,9 @@ pragma solidity ^0.8.17;
  */
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./LybraMintPool.sol"; // IEUSD interface
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
-interface IConfigurator {
-    function getVaultWeight(address pool) external view returns (uint256);
-    function getEUSDAddress() external view returns (address);
-}
-
-interface IMintPool {
-    function getPoolTotalCirculation() external view returns (uint256);
-    function getBorrowedOf(address user) external view returns (uint256);
-}
+import "../interfaces/LybraInterfaces.sol";
 
 contract MiningIncentive is Ownable {
     IConfigurator public immutable configurator;
