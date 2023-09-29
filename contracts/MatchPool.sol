@@ -24,6 +24,10 @@ error WithdrawPaused();
 contract MatchPool is Initializable, OwnableUpgradeable {
     using SafeERC20 for IERC20;
 
+    address constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address constant LBR = 0xed1167b6Dc64E8a366DB86F2E952A482D0981ebd;
+    IUniswapV2Router constant ROUTER = IUniswapV2Router(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
+
     // Price of ETH-LBR LP token, scaled in 1e8
     AggregatorV3Interface private lpPriceFeed; // https://etherscan.io/tx/0x8c638a0998f3b6da40bb1f91602062c46b699150ad70f3b8f07b482df8367102
     IConfigurator public lybraConfigurator;
@@ -208,6 +212,54 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     function setWithdrawPaused(bool _state) external onlyOwner {
         withdrawPaused = _state;
         emit LPWithdrawPaused(_state);
+    }
+
+    function zap() external payable {
+        if (stakePaused) revert StakePaused();
+
+        uint256 ethToSwap = msg.value / 2;
+        address[] memory swapPath = new address[](2);
+        swapPath[0] = WETH;
+        swapPath[1] = LBR;
+        // Swap half of the ETH to LBR
+        uint256[] memory amounts = ROUTER.swapExactETHForTokens{ value: ethToSwap }(
+            0, 
+            swapPath, 
+            address(this), 
+            block.timestamp + 1
+        );
+        uint256 lbrAmount = amounts[1];
+
+        // Add liquidity to get LP token
+        uint256 ethToAdd = msg.value - ethToSwap;
+        (uint256 lbrAdded, uint256 ethAdded, uint256 lpAmount) = ROUTER.addLiquidityETH{ value: ethToAdd }(
+            LBR, 
+            lbrAmount, 
+            0, 
+            0, 
+            address(this), 
+            block.timestamp + 1
+        );
+
+        // Refund excess amounts if values of ETH and LBR swapped from ETH are not the same
+        if (ethToAdd > ethAdded) {
+            (bool sent,) = (msg.sender).call{ value: ethToAdd - ethAdded }("");
+            require(sent, "ETH refund failed");
+        }
+
+        if (lbrAmount > lbrAdded) IERC20(LBR).safeTransfer(msg.sender, lbrAmount - lbrAdded);
+
+        // Stake LP
+        uint256 allowance = ethlbrLpToken.allowance(address(this), address(ethlbrStakePool));
+        if (allowance < lpAmount) ethlbrLpToken.approve(address(ethlbrStakePool), type(uint256).max);
+
+        ethlbrStakePool.stake(lpAmount);
+        totalStaked += lpAmount;
+        staked[msg.sender] += lpAmount;
+
+        emit LpStaked(msg.sender, lpAmount);
+
+        adjustEUSDAmount();
     }
 
     // Stake LBR-ETH LP token
