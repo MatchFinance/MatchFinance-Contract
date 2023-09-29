@@ -20,6 +20,7 @@ error Unauthorized();
 error HealthyAccount();
 error StakePaused();
 error WithdrawPaused();
+error ExceedLimit();
 
 contract MatchPool is Initializable, OwnableUpgradeable {
     using SafeERC20 for IERC20;
@@ -91,6 +92,12 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     bool public stakePaused;
     bool public withdrawPaused;
 
+    // 0 means no limit
+    // Cannot stake more dlp beyond this limit (USD value scaled by 1e18)
+    uint256 stakeLimit;
+    // Cannot supply more LSD beyond this limit (USD value scaled by 1e18)
+    uint256 supplyLimit;
+
     // Used for calculations in adjustEUSDAmount() only
     struct Calc {
         // Amount of eUSD to mint to achieve { dlpRatioIdeal }
@@ -122,6 +129,8 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     event LiquidationParamsNormalChanged(uint128 newDiscount, uint128 newCloseFactor);
     event LPStakePaused(bool newState);
     event LPWithdrawPaused(bool newState);
+    event StakeLimitChanged(uint256 newLimit);
+    event SupplyLimitChanged(uint256 newLimit);
 
     event LpStaked(address indexed account, uint256 amount);
     event LpWithdrew(address indexed account, uint256 amount);
@@ -137,9 +146,11 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         setDlpRatioRange(275, 325, 300);
         setCollateralRatioRange(190e18, 210e18, 200e18);
         setBorrowRate(1e17);
-        setBorrowRatio(80e18, 75e18, 50e18);
+        setBorrowRatio(85e18, 75e18, 50e18);
         setLiquidationParams(105e18, 20e18);
         setLiquidationParamsNormal(110e18, 50e18);
+        setStakeLimit(60000e18);
+        setSupplyLimit(300000e18);
     }
 
     function setLP(address _ethlbrLpToken) external onlyOwner {
@@ -204,16 +215,26 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         emit LiquidationParamsNormalChanged(_discount, _closeFactor);
     }
 
-    function setStakePaused(bool _state) external onlyOwner {
+    function setStakePaused(bool _state) public onlyOwner {
         stakePaused = _state;
         emit LPStakePaused(_state);
     }
 
-    function setWithdrawPaused(bool _state) external onlyOwner {
+    function setWithdrawPaused(bool _state) public onlyOwner {
         withdrawPaused = _state;
         emit LPWithdrawPaused(_state);
     }
 
+    function setStakeLimit(uint256 _valueLimit) public onlyOwner {
+        stakeLimit = _valueLimit;
+        emit StakeLimitChanged(_valueLimit);
+    }
+
+    function setSupplyLimit(uint256 _valueLimit) public onlyOwner {
+        supplyLimit = _valueLimit;
+        emit SupplyLimitChanged(_valueLimit);
+    }
+    
     function zap() external payable {
         if (stakePaused) revert StakePaused();
 
@@ -249,6 +270,10 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
         if (lbrAmount > lbrAdded) IERC20(LBR).safeTransfer(msg.sender, lbrAmount - lbrAdded);
 
+        if (getLpValue(totalStaked + lpAmount) > stakeLimit && stakeLimit != 0) revert ExceedLimit();
+
+        rewardManager.dlpUpdateReward(msg.sender);
+
         // Stake LP
         uint256 allowance = ethlbrLpToken.allowance(address(this), address(ethlbrStakePool));
         if (allowance < lpAmount) ethlbrLpToken.approve(address(ethlbrStakePool), type(uint256).max);
@@ -265,6 +290,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     // Stake LBR-ETH LP token
     function stakeLP(uint256 _amount) external {
         if (stakePaused) revert StakePaused();
+        if (getLpValue(totalStaked + _amount) > stakeLimit && stakeLimit != 0) revert ExceedLimit();
 
         rewardManager.dlpUpdateReward(msg.sender);
 
@@ -303,6 +329,8 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     }
 
     function supplyETH() external payable {
+        if ((totalSupplied + msg.value) * mintPool.getAssetPrice() / 1e18 > supplyLimit && supplyLimit != 0) revert ExceedLimit();
+
         rewardManager.lsdUpdateReward(msg.sender);
 
         uint256 sharesAmount = ILido(mintPool.getAsset()).submit{value: msg.value}(address(0));
@@ -316,6 +344,8 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     }
 
     function supplyStETH(uint256 _amount) external {
+        if ((totalSupplied + _amount) * mintPool.getAssetPrice() / 1e18 > supplyLimit && supplyLimit != 0) revert ExceedLimit();
+
         rewardManager.lsdUpdateReward(msg.sender);
 
         IERC20(mintPool.getAsset()).safeTransferFrom(msg.sender, address(this), _amount);
@@ -596,7 +626,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         if (amountToBurnTotal > 0) {
             _burnEUSD(amountToBurnTotal);
             if (calc.collateralRatioCurrent > collateralRatioIdeal) _withdrawNoPunish(_totalDeposited, _totalMinted);
-            // Result: dlp ratio = 6%, collateral ratio = 200%
+            // Result: dlp ratio = 3%, collateral ratio = 200%
             return;
         }
 
@@ -624,14 +654,14 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         // Can mint more by depositing more
         if (calc.mintAmountGivenDlp > maxMintAmountWithoutDeposit) {
             // Insufficient idle stETH, so mint only amount that doesn't require deposit
-            // Result: dlp ratio > 6%, collateral ratio = 200%
+            // Result: dlp ratio > 3%, collateral ratio = 200%
             if (totalIdle < 1 ether) _mintEUSD(maxMintAmountWithoutDeposit);
             // Deposit more and mint more
             else _mintMin(calc, _totalMinted, _totalDeposited, _totalDeposited + totalIdle);
             return;
         }
 
-        // Result: dlp ratio = 6%, collateral ratio >= 200%
+        // Result: dlp ratio = 3%, collateral ratio >= 200%
         _mintEUSD(calc.mintAmountGivenDlp);
         if (maxMintAmountWithoutDeposit > calc.mintAmountGivenDlp) 
             _withdrawNoPunish(_totalDeposited, _totalMinted + calc.mintAmountGivenDlp);
@@ -798,7 +828,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         // Mint: min(mintAmountGivenDlp, mintAmountGivenCollateral)
         if (calc.mintAmountGivenDlp > calc.mintAmountGivenCollateral) {
             _depositToLybra(_fullDeposit - _depositedAmount, calc.mintAmountGivenCollateral);
-            // Result: dlp ratio > 6%, collateral ratio = 200%
+            // Result: dlp ratio > 3%, collateral ratio = 200%
             return;
         }
 
@@ -806,7 +836,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         calc.amountToDeposit = _getDepositAmountDelta(_depositedAmount, _mintedAmount + calc.mintAmountGivenDlp);
         // Accept over-collateralization, i.e. deposit at least 1 ether
         _depositToLybra(_max(calc.amountToDeposit, 1 ether), calc.mintAmountGivenDlp);
-        // Result: dlp ratio = 6%, collateral ratio >= 200%
+        // Result: dlp ratio = 3%, collateral ratio >= 200%
         return;
     }
 
