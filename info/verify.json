@@ -1,4 +1,14 @@
 {
+	"mainnet": {
+		"MatchPool": {
+			"address": "0xeeF9dDf57D20192772587cda5690509eE01A8549",
+			"args": []
+		},
+		"RewardManager": {
+			"address": "0xC19E112c68892647D5d589f658852f4d8cf52235",
+			"args": []
+		}
+	},
 	"sepolia": {
 		"MatchPool": {
 			"address": "0x25df44328dbcba6e21bfb94fd0180521ddc73c39",
