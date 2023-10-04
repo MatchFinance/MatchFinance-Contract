@@ -10,6 +10,8 @@ import "../interfaces/LybraInterfaces.sol";
 
 contract LybraMintPool is Ownable {
     using SafeERC20 for IERC20;
+
+    IConfigurator public immutable configurator;
     IEUSD public immutable EUSD;
     IERC20 public immutable collateralAsset;
     // Iconfigurator public immutable configurator;
@@ -39,10 +41,11 @@ contract LybraMintPool is Ownable {
     // event FeeDistribution(address indexed feeAddress, uint256 feeAmount, uint256 timestamp);
 
     //etherOracle = 0x4c517D4e2C851CA76d7eC94B805269Df0f2201De
-    constructor(address _collateralAsset, address _eusd) {
+    constructor(address _collateralAsset, address _eusd, address _config) {
         etherPrice = 1600e18;
         collateralAsset = IERC20(_collateralAsset);
         EUSD = IEUSD(_eusd);
+        configurator = IConfigurator(_config);
     }
 
     function setEtherPrice(uint256 _newPrice) external onlyOwner {
@@ -264,7 +267,7 @@ contract LybraMintPool is Ownable {
      */
     function _mintEUSD(address _provider, address _onBehalfOf, uint256 _mintAmount, uint256 _assetPrice) internal virtual {
         // require(poolTotalCirculation + _mintAmount <= configurator.mintVaultMaxSupply(address(this)), "ESL");
-        // configurator.refreshMintReward(_provider);
+        configurator.refreshMintReward(_provider);
         borrowed[_provider] += _mintAmount;
 
         EUSD.mint(_onBehalfOf, _mintAmount);
@@ -283,7 +286,7 @@ contract LybraMintPool is Ownable {
         uint256 amount = borrowed[_onBehalfOf] >= _amount ? _amount : borrowed[_onBehalfOf];
 
         EUSD.burn(_provider, amount);
-        // configurator.refreshMintReward(_onBehalfOf);
+        configurator.refreshMintReward(_onBehalfOf);
 
         borrowed[_onBehalfOf] -= amount;
         // _saveReport();

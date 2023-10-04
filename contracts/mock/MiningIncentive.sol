@@ -147,12 +147,12 @@ contract MiningIncentive is Ownable {
      */
     function refreshReward(address _account) external updateReward(_account) {}
 
-    function getBoost() public pure returns (uint256) {
+    function getBoost(address _account) public pure returns (uint256) {
         return 100 * 1e18;
     }
 
     function earned(address _account) public view returns (uint256) {
-        return ((stakedOf(_account) * getBoost() * (rewardPerToken() - userRewardPerTokenPaid[_account])) / 1e38) + rewards[_account];
+        return ((stakedOf(_account) * getBoost(_account) * (rewardPerToken() - userRewardPerTokenPaid[_account])) / 1e38) + rewards[_account];
     }
 
     /**
@@ -233,6 +233,8 @@ contract MiningIncentive is Ownable {
     // Reward amount for a week
     function setRewardRatio(uint256 _amount) external onlyOwner updateReward(address(0)) {
         rewardRatio = _amount / duration;
+        finishAt = block.timestamp + duration;
+        updatedAt = block.timestamp;
     }
 
     function getLBRPrice() external view returns (uint256) {

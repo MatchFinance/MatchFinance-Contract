@@ -2,6 +2,10 @@
 
 pragma solidity ^0.8.19;
 
+interface IMining {
+    function refreshReward(address user) external;
+}
+
 interface IStakePool {
     function stake(uint256 _amount) external;
     function withdraw(uint256 _amount) external;
@@ -24,6 +28,7 @@ interface IMintPool {
 interface IConfigurator {
     function getVaultWeight(address pool) external view returns (uint256);
     function getEUSDAddress() external view returns (address);
+    function refreshMintReward(address _account) external;
 }
 
 // eUSD mining incentive, dlp stake reward pool

@@ -88,13 +88,13 @@ contract StakePool is Ownable {
         emit WithdrawToken(msg.sender, _amount, block.timestamp);
     }
 
-    function getBoost() public pure returns (uint256) {
+    function getBoost(address _account) public pure returns (uint256) {
         return 100 * 1e18;
     }
 
     // Calculates and returns the earned rewards for a user
     function earned(address _account) public view returns (uint256) {
-        return ((balanceOf[_account] * getBoost() * (rewardPerToken() - userRewardPerTokenPaid[_account])) / 1e38) + rewards[_account];
+        return ((balanceOf[_account] * getBoost(_account) * (rewardPerToken() - userRewardPerTokenPaid[_account])) / 1e38) + rewards[_account];
     }
 
     // Allows users to claim their earned rewards
