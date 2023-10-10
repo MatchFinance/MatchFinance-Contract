@@ -626,6 +626,616 @@
           }
         }
       }
+    },
+    "6ab578e11101324c17770fa774a8d8ac32ccc03febab5b41aa850070ff9e4b4f": {
+      "address": "0x22a68729A5b9519cE4DFA8b6BDA486Ed2E1699FF",
+      "txHash": "0x2eafd1e0c9f149b8c56ca22d5a821301897e7e7e62e01144820a4dfb0d22c896",
+      "layout": {
+        "solcVersion": "0.8.19",
+        "storage": [
+          {
+            "label": "_initialized",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint8",
+            "contract": "Initializable",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:63",
+            "retypedFrom": "bool"
+          },
+          {
+            "label": "_initializing",
+            "offset": 1,
+            "slot": "0",
+            "type": "t_bool",
+            "contract": "Initializable",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:68"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ContextUpgradeable",
+            "src": "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol:36"
+          },
+          {
+            "label": "_owner",
+            "offset": 0,
+            "slot": "51",
+            "type": "t_address",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:22"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "52",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:94"
+          },
+          {
+            "label": "lpPriceFeed",
+            "offset": 0,
+            "slot": "101",
+            "type": "t_contract(AggregatorV3Interface)45",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:33"
+          },
+          {
+            "label": "lybraConfigurator",
+            "offset": 0,
+            "slot": "102",
+            "type": "t_contract(IConfigurator)6871",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:34"
+          },
+          {
+            "label": "ethlbrStakePool",
+            "offset": 0,
+            "slot": "103",
+            "type": "t_contract(IStakePool)6781",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:35"
+          },
+          {
+            "label": "ethlbrLpToken",
+            "offset": 0,
+            "slot": "104",
+            "type": "t_contract(IERC20)1496",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:36"
+          },
+          {
+            "label": "rewardManager",
+            "offset": 0,
+            "slot": "105",
+            "type": "t_contract(IRewardManager)6756",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:37"
+          },
+          {
+            "label": "mintPools",
+            "offset": 0,
+            "slot": "106",
+            "type": "t_array(t_contract(IMintPool)6848)dyn_storage",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:38"
+          },
+          {
+            "label": "totalStaked",
+            "offset": 0,
+            "slot": "107",
+            "type": "t_uint256",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:42"
+          },
+          {
+            "label": "staked",
+            "offset": 0,
+            "slot": "108",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:44"
+          },
+          {
+            "label": "totalSupplied",
+            "offset": 0,
+            "slot": "109",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:49"
+          },
+          {
+            "label": "supplied",
+            "offset": 0,
+            "slot": "110",
+            "type": "t_mapping(t_address,t_mapping(t_address,t_uint256))",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:51"
+          },
+          {
+            "label": "totalDeposited",
+            "offset": 0,
+            "slot": "111",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:54"
+          },
+          {
+            "label": "totalMinted",
+            "offset": 0,
+            "slot": "112",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:57"
+          },
+          {
+            "label": "totalBorrowed",
+            "offset": 0,
+            "slot": "113",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:59"
+          },
+          {
+            "label": "borrowed",
+            "offset": 0,
+            "slot": "114",
+            "type": "t_mapping(t_address,t_mapping(t_address,t_struct(BorrowInfo)2693_storage))",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:71"
+          },
+          {
+            "label": "borrowRatePerSec",
+            "offset": 0,
+            "slot": "115",
+            "type": "t_uint256",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:72"
+          },
+          {
+            "label": "maxBorrowRatio",
+            "offset": 0,
+            "slot": "116",
+            "type": "t_uint256",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:74"
+          },
+          {
+            "label": "globalBorrowRatioThreshold",
+            "offset": 0,
+            "slot": "117",
+            "type": "t_uint256",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:75"
+          },
+          {
+            "label": "globalBorrowRatioLiuquidation",
+            "offset": 0,
+            "slot": "118",
+            "type": "t_uint256",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:76"
+          },
+          {
+            "label": "liquidationDiscount",
+            "offset": 0,
+            "slot": "119",
+            "type": "t_uint128",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:79"
+          },
+          {
+            "label": "closeFactor",
+            "offset": 16,
+            "slot": "119",
+            "type": "t_uint128",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:80"
+          },
+          {
+            "label": "liquidationDiscountNormal",
+            "offset": 0,
+            "slot": "120",
+            "type": "t_uint128",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:82"
+          },
+          {
+            "label": "closeFactorNormal",
+            "offset": 16,
+            "slot": "120",
+            "type": "t_uint128",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:83"
+          },
+          {
+            "label": "dlpRatioUpper",
+            "offset": 0,
+            "slot": "121",
+            "type": "t_uint256",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:85"
+          },
+          {
+            "label": "dlpRatioLower",
+            "offset": 0,
+            "slot": "122",
+            "type": "t_uint256",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:86"
+          },
+          {
+            "label": "dlpRatioIdeal",
+            "offset": 0,
+            "slot": "123",
+            "type": "t_uint256",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:87"
+          },
+          {
+            "label": "collateralRatioUpper",
+            "offset": 0,
+            "slot": "124",
+            "type": "t_uint256",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:88"
+          },
+          {
+            "label": "collateralRatioLower",
+            "offset": 0,
+            "slot": "125",
+            "type": "t_uint256",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:89"
+          },
+          {
+            "label": "collateralRatioIdeal",
+            "offset": 0,
+            "slot": "126",
+            "type": "t_uint256",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:90"
+          },
+          {
+            "label": "stakePaused",
+            "offset": 0,
+            "slot": "127",
+            "type": "t_bool",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:92"
+          },
+          {
+            "label": "withdrawPaused",
+            "offset": 1,
+            "slot": "127",
+            "type": "t_bool",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:93"
+          },
+          {
+            "label": "stakeLimit",
+            "offset": 0,
+            "slot": "128",
+            "type": "t_uint256",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:97"
+          },
+          {
+            "label": "supplyLimit",
+            "offset": 0,
+            "slot": "129",
+            "type": "t_uint256",
+            "contract": "MatchPool",
+            "src": "contracts/MatchPool.sol:99"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_array(t_contract(IMintPool)6848)dyn_storage": {
+            "label": "contract IMintPool[]",
+            "numberOfBytes": "32"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]",
+            "numberOfBytes": "1568"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_contract(AggregatorV3Interface)45": {
+            "label": "contract AggregatorV3Interface",
+            "numberOfBytes": "20"
+          },
+          "t_contract(IConfigurator)6871": {
+            "label": "contract IConfigurator",
+            "numberOfBytes": "20"
+          },
+          "t_contract(IERC20)1496": {
+            "label": "contract IERC20",
+            "numberOfBytes": "20"
+          },
+          "t_contract(IMintPool)6848": {
+            "label": "contract IMintPool",
+            "numberOfBytes": "20"
+          },
+          "t_contract(IRewardManager)6756": {
+            "label": "contract IRewardManager",
+            "numberOfBytes": "20"
+          },
+          "t_contract(IStakePool)6781": {
+            "label": "contract IStakePool",
+            "numberOfBytes": "20"
+          },
+          "t_mapping(t_address,t_mapping(t_address,t_struct(BorrowInfo)2693_storage))": {
+            "label": "mapping(address => mapping(address => struct MatchPool.BorrowInfo))",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_mapping(t_address,t_uint256))": {
+            "label": "mapping(address => mapping(address => uint256))",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_struct(BorrowInfo)2693_storage)": {
+            "label": "mapping(address => struct MatchPool.BorrowInfo)",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_uint256)": {
+            "label": "mapping(address => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_struct(BorrowInfo)2693_storage": {
+            "label": "struct MatchPool.BorrowInfo",
+            "members": [
+              {
+                "label": "principal",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "interestAmount",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "1"
+              },
+              {
+                "label": "accInterest",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "2"
+              },
+              {
+                "label": "interestTimestamp",
+                "type": "t_uint256",
+                "offset": 0,
+                "slot": "3"
+              }
+            ],
+            "numberOfBytes": "128"
+          },
+          "t_uint128": {
+            "label": "uint128",
+            "numberOfBytes": "16"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          }
+        }
+      }
+    },
+    "acae693f65a742702cc7efa4ed9551bbe1282def17f4fa6512fde7978d6a55c8": {
+      "address": "0x8047C4a9c455EBB534697906b8f1C08CcB42912f",
+      "txHash": "0xa83953951b33b8bde4361e55810dbb1b7421fac8be814067efb570c03bf0dfad",
+      "layout": {
+        "solcVersion": "0.8.19",
+        "storage": [
+          {
+            "label": "_initialized",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint8",
+            "contract": "Initializable",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:63",
+            "retypedFrom": "bool"
+          },
+          {
+            "label": "_initializing",
+            "offset": 1,
+            "slot": "0",
+            "type": "t_bool",
+            "contract": "Initializable",
+            "src": "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol:68"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_array(t_uint256)50_storage",
+            "contract": "ContextUpgradeable",
+            "src": "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol:36"
+          },
+          {
+            "label": "_owner",
+            "offset": 0,
+            "slot": "51",
+            "type": "t_address",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:22"
+          },
+          {
+            "label": "__gap",
+            "offset": 0,
+            "slot": "52",
+            "type": "t_array(t_uint256)49_storage",
+            "contract": "OwnableUpgradeable",
+            "src": "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol:94"
+          },
+          {
+            "label": "matchPool",
+            "offset": 0,
+            "slot": "101",
+            "type": "t_contract(IMatchPool)6746",
+            "contract": "RewardManager",
+            "src": "contracts/RewardManager.sol:20"
+          },
+          {
+            "label": "rewardPerTokenStored",
+            "offset": 0,
+            "slot": "102",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "RewardManager",
+            "src": "contracts/RewardManager.sol:26"
+          },
+          {
+            "label": "rewardPerTokenPaid",
+            "offset": 0,
+            "slot": "103",
+            "type": "t_mapping(t_address,t_uint256)",
+            "contract": "RewardManager",
+            "src": "contracts/RewardManager.sol:29"
+          },
+          {
+            "label": "userRewardsPerTokenPaid",
+            "offset": 0,
+            "slot": "104",
+            "type": "t_mapping(t_address,t_mapping(t_address,t_uint256))",
+            "contract": "RewardManager",
+            "src": "contracts/RewardManager.sol:31"
+          },
+          {
+            "label": "userRewards",
+            "offset": 0,
+            "slot": "105",
+            "type": "t_mapping(t_address,t_mapping(t_address,t_uint256))",
+            "contract": "RewardManager",
+            "src": "contracts/RewardManager.sol:32"
+          },
+          {
+            "label": "totalEUSD",
+            "offset": 0,
+            "slot": "106",
+            "type": "t_uint256",
+            "contract": "RewardManager",
+            "src": "contracts/RewardManager.sol:36"
+          },
+          {
+            "label": "dlpRewardPool",
+            "offset": 0,
+            "slot": "107",
+            "type": "t_address",
+            "contract": "RewardManager",
+            "src": "contracts/RewardManager.sol:38"
+          },
+          {
+            "label": "miningIncentive",
+            "offset": 0,
+            "slot": "108",
+            "type": "t_address",
+            "contract": "RewardManager",
+            "src": "contracts/RewardManager.sol:39"
+          },
+          {
+            "label": "eUSD",
+            "offset": 0,
+            "slot": "109",
+            "type": "t_address",
+            "contract": "RewardManager",
+            "src": "contracts/RewardManager.sol:40"
+          },
+          {
+            "label": "treasury",
+            "offset": 0,
+            "slot": "110",
+            "type": "t_address",
+            "contract": "RewardManager",
+            "src": "contracts/RewardManager.sol:42"
+          },
+          {
+            "label": "treasuryShare",
+            "offset": 0,
+            "slot": "111",
+            "type": "t_uint128",
+            "contract": "RewardManager",
+            "src": "contracts/RewardManager.sol:45"
+          },
+          {
+            "label": "stakerShare",
+            "offset": 16,
+            "slot": "111",
+            "type": "t_uint128",
+            "contract": "RewardManager",
+            "src": "contracts/RewardManager.sol:46"
+          },
+          {
+            "label": "mesLBR",
+            "offset": 0,
+            "slot": "112",
+            "type": "t_contract(IERC20Mintable)5563",
+            "contract": "RewardManager",
+            "src": "contracts/RewardManager.sol:48"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_array(t_uint256)49_storage": {
+            "label": "uint256[49]",
+            "numberOfBytes": "1568"
+          },
+          "t_array(t_uint256)50_storage": {
+            "label": "uint256[50]",
+            "numberOfBytes": "1600"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_contract(IERC20Mintable)5563": {
+            "label": "contract IERC20Mintable",
+            "numberOfBytes": "20"
+          },
+          "t_contract(IMatchPool)6746": {
+            "label": "contract IMatchPool",
+            "numberOfBytes": "20"
+          },
+          "t_mapping(t_address,t_mapping(t_address,t_uint256))": {
+            "label": "mapping(address => mapping(address => uint256))",
+            "numberOfBytes": "32"
+          },
+          "t_mapping(t_address,t_uint256)": {
+            "label": "mapping(address => uint256)",
+            "numberOfBytes": "32"
+          },
+          "t_uint128": {
+            "label": "uint128",
+            "numberOfBytes": "16"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          },
+          "t_uint8": {
+            "label": "uint8",
+            "numberOfBytes": "1"
+          }
+        }
+      }
     }
   }
 }
