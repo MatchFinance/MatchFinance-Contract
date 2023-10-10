@@ -77,8 +77,8 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 		(uint256 dlpEarned,) = earnedSinceLastUpdate(dlpRewardPool);
 		(uint256 lsdEarned,) = earnedSinceLastUpdate(miningIncentive);
 		uint256 rewardAmount;
-		if (_rewardPool == dlpRewardPool) dlpEarned + lsdEarned * stakerShare / 100;
-		else if (_rewardPool == miningIncentive) lsdEarned * (100 - stakerShare - treasuryShare) / 100;
+		if (_rewardPool == dlpRewardPool) rewardAmount = dlpEarned + lsdEarned * stakerShare / 100;
+		else if (_rewardPool == miningIncentive) rewardAmount = lsdEarned * (100 - stakerShare - treasuryShare) / 100;
 
 		return _rewardPerToken(_rewardPool, rewardAmount);
 	}
@@ -87,8 +87,8 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 		(uint256 dlpEarned,) = earnedSinceLastUpdate(dlpRewardPool);
 		(uint256 lsdEarned,) = earnedSinceLastUpdate(miningIncentive);
 		uint256 rewardAmount;
-		if (_rewardPool == dlpRewardPool) dlpEarned + lsdEarned * stakerShare / 100;
-		else if (_rewardPool == miningIncentive) lsdEarned * (100 - stakerShare - treasuryShare) / 100;
+		if (_rewardPool == dlpRewardPool) rewardAmount = dlpEarned + lsdEarned * stakerShare / 100;
+		else if (_rewardPool == miningIncentive) rewardAmount = lsdEarned * (100 - stakerShare - treasuryShare) / 100;
 
 		return _earned(_account, _rewardPool, rewardAmount);
 	}
@@ -107,6 +107,10 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 		stakerShare = _stakerShare;
 
 		emit RewardShareChanged(_treasuryShare, _stakerShare);
+	}
+
+	function setTreasury(address _treasury) external onlyOwner {
+		treasury = _treasury;
 	}
 
 	function setMesLBR(address _mesLBR) external onlyOwner {
