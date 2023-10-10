@@ -4,11 +4,13 @@ pragma solidity ^0.8.19;
 
 interface IMining {
     function refreshReward(address user) external;
+    function getReward() external;
 }
 
 interface IStakePool {
     function stake(uint256 _amount) external;
     function withdraw(uint256 _amount) external;
+    function getReward() external;
 }
 
 interface IMintPool {
@@ -16,7 +18,7 @@ interface IMintPool {
     function depositAssetToMint(uint256 assetAmount, uint256 mintAmount) external;
     function depositedAsset(address _user) external view returns (uint256);
     // Price of stETH, scaled in 1e18
-    function getAssetPrice() external view returns (uint256);
+    function getAssetPrice() external returns (uint256);
     function withdraw(address onBehalfOf, uint256 amount) external;
     function mint(address onBehalfOf, uint256 amount) external;
     function burn(address onBehalfOf, uint256 amount) external;
@@ -29,6 +31,7 @@ interface IConfigurator {
     function getVaultWeight(address pool) external view returns (uint256);
     function getEUSDAddress() external view returns (address);
     function refreshMintReward(address _account) external;
+    function eUSDMiningIncentives() external view returns (address);
 }
 
 // eUSD mining incentive, dlp stake reward pool

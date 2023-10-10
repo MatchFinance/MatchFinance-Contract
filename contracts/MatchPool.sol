@@ -716,10 +716,15 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         return amount;
     }
 
+    function claimRewards() external {
+        ethlbrStakePool.getReward();
+        IMining(lybraConfigurator.eUSDMiningIncentives()).getReward();
+    }
+
     /**
      * @notice Get max. amount of eUSD that can be borrowed given amount of stETH supplied
      */
-    function _getMaxBorrow(uint256 _suppliedAmount) private view returns (uint256) {
+    function _getMaxBorrow(uint256 _suppliedAmount) private returns (uint256) {
         uint256 ethPrice = getMintPool().getAssetPrice();
         return _suppliedAmount * ethPrice * maxBorrowRatio / collateralRatioIdeal / 1e18;
     }
@@ -741,7 +746,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
      * @param _mintedAmount Amount of eUSD minted
      * @return Collateral ratio based on given params
      */
-    function _getCollateralRatio(uint256 _depositedAmount, uint256 _mintedAmount) private view returns (uint256) {
+    function _getCollateralRatio(uint256 _depositedAmount, uint256 _mintedAmount) private returns (uint256) {
         if (_mintedAmount == 0) return collateralRatioIdeal;
         else return _depositedAmount * getMintPool().getAssetPrice() * 100 / _mintedAmount;
     }
@@ -757,7 +762,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
      * @return Amount of stETH to deposit to/withdraw from Lybra vault in order to achieve { collateralRatioIdeal }
      *  1st condition -> deposit amount, 2nd condition -> withdraw amount
      */
-    function _getDepositAmountDelta(uint256 _depositedAmount, uint256 _mintedAmount) private view returns (uint256) {
+    function _getDepositAmountDelta(uint256 _depositedAmount, uint256 _mintedAmount) private returns (uint256) {
         uint256 newDepositedAmount = collateralRatioIdeal * _mintedAmount / getMintPool().getAssetPrice() / 100; 
         return newDepositedAmount > _depositedAmount ?
             newDepositedAmount - _depositedAmount + 1 : _depositedAmount - newDepositedAmount;
@@ -769,7 +774,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
      * @return Amount of eUSD to mint from/repay to Lybra vault in order to achieve { collateralRatioIdeal }
      *  1st condition -> mint amount, 2nd condition -> burn amount
      */
-    function _getMintAmountDeltaC(uint256 _depositedAmount, uint256 _mintedAmount) private view returns (uint256) {
+    function _getMintAmountDeltaC(uint256 _depositedAmount, uint256 _mintedAmount) private returns (uint256) {
         uint256 newMintedAmount = _depositedAmount * getMintPool().getAssetPrice() * 100 / collateralRatioIdeal;
         return newMintedAmount > _mintedAmount ?
             newMintedAmount - _mintedAmount : _mintedAmount - newMintedAmount;
