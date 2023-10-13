@@ -20,6 +20,7 @@ error Unauthorized();
 error HealthyAccount();
 error StakePaused();
 error WithdrawPaused();
+error BorrowPaused();
 error ExceedLimit();
 
 contract MatchPool is Initializable, OwnableUpgradeable {
@@ -98,6 +99,8 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     // Cannot supply more LSD beyond this limit (USD value scaled by 1e18)
     uint256 supplyLimit;
 
+    bool public borrowPaused;
+
     // Used for calculations in adjustEUSDAmount() only
     struct Calc {
         // Amount of eUSD to mint to achieve { dlpRatioIdeal }
@@ -129,6 +132,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     event LiquidationParamsNormalChanged(uint128 newDiscount, uint128 newCloseFactor);
     event LPStakePaused(bool newState);
     event LPWithdrawPaused(bool newState);
+    event eUSDBorrowPaused(bool newState);
     event StakeLimitChanged(uint256 newLimit);
     event SupplyLimitChanged(uint256 newLimit);
     event MintPoolAdded(address newMintPool);
@@ -228,6 +232,11 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         emit LPWithdrawPaused(_state);
     }
 
+    function setBorrowPaused(bool _state) external onlyOwner {
+        borrowPaused = _state;
+        emit eUSDBorrowPaused(_state);
+    }
+
     function setStakeLimit(uint256 _valueLimit) public onlyOwner {
         stakeLimit = _valueLimit;
         emit StakeLimitChanged(_valueLimit);
@@ -292,7 +301,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
     //     emit LpStaked(msg.sender, lpAmount);
 
-    //     adjustEUSDAmount();
+    //     mintEUSD();
     // }
 
     // Stake LBR-ETH LP token
@@ -313,7 +322,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
         emit LpStaked(msg.sender, _amount);
 
-        adjustEUSDAmount();
+        mintEUSD();
     }
 
     // Withdraw LBR-ETH LP token
@@ -333,7 +342,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
         emit LpWithdrew(msg.sender, _amount);
 
-        adjustEUSDAmount();
+        mintEUSD();
     }
 
     function supplyETH() external payable {
@@ -351,7 +360,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
         emit stETHSupplied(msg.sender, msg.value);
 
-        adjustEUSDAmount();
+        mintEUSD();
     }
 
     function supplyStETH(uint256 _amount) external {
@@ -368,7 +377,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
         emit stETHSupplied(msg.sender, _amount);
 
-        adjustEUSDAmount();
+        mintEUSD();
     }
 
     function withdrawStETH(uint256 _amount) external {
@@ -383,8 +392,6 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         if (_amount > withdrawable) revert ExceedAmountAllowed(_amount, withdrawable);
         uint256 _totalDeposited = totalDeposited[mintPoolAddress];
         uint256 _totalMinted = totalMinted[mintPoolAddress];
-        // Disallow withdrawal if collateral ratio already below 200%
-        if (_getCollateralRatio(_totalDeposited, _totalMinted) < collateralRatioIdeal) revert InsufficientCollateral();
 
         rewardManager.lsdUpdateReward(msg.sender);
 
@@ -419,11 +426,13 @@ contract MatchPool is Initializable, OwnableUpgradeable {
             emit stETHWithdrew(msg.sender, _amount, 0);
         }
 
-        adjustEUSDAmount();
+        mintEUSD();
     }
 
     // Take out/borrow eUSD from Match Pool
     function borrowEUSD(uint256 _amount) external {
+        if (borrowPaused) revert BorrowPaused();
+
         address mintPoolAddress = address(getMintPool());
 
         uint256 maxBorrow = _getMaxBorrow(supplied[mintPoolAddress][msg.sender]);
@@ -445,7 +454,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
             BorrowInfo storage info = borrowed[mintPoolAddress][msg.sender];
 
             // Already borrowed before with interest
-            if (info.interestAmount != 0) info.accInterest += _getAccInterest(msg.sender);
+            if (info.interestAmount != 0) info.accInterest += getAccInterest(msg.sender);
             info.interestAmount += _amount;
             info.interestTimestamp = block.timestamp;
         }
@@ -454,14 +463,14 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
         emit eUSDBorrowed(msg.sender, _amount);
 
-        adjustEUSDAmount();
+        mintEUSD();
     }
 
     function repayEUSD(address _account, uint256 _amount) public {
         address mintPoolAddress = address(getMintPool());
 
         uint256 oldBorrowAmount = borrowed[mintPoolAddress][_account].principal;
-        uint256 newAccInterest = borrowed[mintPoolAddress][_account].accInterest + _getAccInterest(_account);
+        uint256 newAccInterest = borrowed[mintPoolAddress][_account].accInterest + getAccInterest(_account);
         IERC20 eUSD = IERC20(lybraConfigurator.getEUSDAddress());
 
         // Just repaying interest
@@ -515,7 +524,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
         emit eUSDRepaid(_account, _amount);
 
-        adjustEUSDAmount();
+        mintEUSD();
     }
 
     function liquidate(address _account, uint256 _repayAmount) external {
@@ -548,7 +557,29 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
         emit Liquidated(_account, msg.sender, seizeAmount);
 
-        adjustEUSDAmount();
+        mintEUSD();
+    }
+
+    /**
+     * @notice Assummes that dlp ratio is always > 3%
+     */
+    function mintEUSD() public {
+        address mintPoolAddress = address(getMintPool());
+        uint256 _totalDeposited = totalDeposited[mintPoolAddress];
+        uint256 _totalMinted = totalMinted[mintPoolAddress];
+        uint256 _collateralRatioIdeal = collateralRatioIdeal;
+        uint256 totalIdle = totalSupplied[mintPoolAddress] - _totalDeposited;
+
+        if (_getCollateralRatio(_totalDeposited, _totalMinted) > _collateralRatioIdeal) {
+            if (totalIdle < 1 ether) _mintEUSD(_getMintAmountDeltaC(_totalDeposited, _totalMinted));
+            else _depositToLybra(totalIdle, _getMintAmountDeltaC(_totalDeposited + totalIdle, _totalMinted));
+            return;
+        }
+
+        if (totalIdle < 1 ether) return;
+        // Can mint more after depositing more, even if current c.r. <= { collateralRatioIdeal }
+        if (_getCollateralRatio(_totalDeposited + totalIdle, _totalMinted) > _collateralRatioIdeal) 
+            _depositToLybra(totalIdle, _getMintAmountDeltaC(_totalDeposited + totalIdle, _totalMinted));
     }
 
     /**
@@ -594,10 +625,10 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         uint256 totalIdle = _totalSupplied - _totalDeposited;
         calc.collateralRatioCurrent = _getCollateralRatio(_totalDeposited, _totalMinted);
 
-        // When collateral ratio falls short of ideal
+        // When collateral ratio falls short of lower bound
         // Option 1: Deposit to increasae collateral ratio, doesn't affect dlp ratio
         // Option 2: Burn eUSD to increase collateral ratio
-        if (calc.collateralRatioCurrent < collateralRatioIdeal) {
+        if (calc.collateralRatioCurrent <= collateralRatioLower) {
             // Must be Option 2 due to Lybra deposit min. requirement
             if (totalIdle < 1 ether) {
                 calc.burnAmountGivenCollateral = _getMintAmountDeltaC(_totalDeposited, _totalMinted);
@@ -623,7 +654,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
                 return;
             }
 
-            // If dlp ratio required burning (line 260)
+            // If dlp ratio required burning (line 584)
             if (amountToBurnTotal > 0) _burnEUSD(amountToBurnTotal);
 
             // 1 ether <= totalIdle == amountToDeposit
@@ -644,55 +675,57 @@ contract MatchPool is Initializable, OwnableUpgradeable {
             }
 
             // If (dlpRatioCurrent >= dlpRatioUpper) -> mint more to maximize reward
+            // Collateral ratio must be > 200% after depositing all idle stETH, according to prev. checks
             _mintMin(calc, _totalMinted, _totalDeposited, _totalDeposited + totalIdle);
             return;
         }
 
-        // If dlp ratio required burning (line 260)
-        // (dlp ratio == { dlpRatioIdeal } && collateral ratio >= { collateralRatioIdeal })
-        if (amountToBurnTotal > 0) {
-            _burnEUSD(amountToBurnTotal);
-            if (calc.collateralRatioCurrent > collateralRatioIdeal) _withdrawNoPunish(_totalDeposited, _totalMinted);
-            // Result: dlp ratio = 3%, collateral ratio = 200%
-            return;
-        }
-
-        if (calc.collateralRatioCurrent == collateralRatioIdeal) {
-            // Mint condition: (dlpRatioCurrent >= dlpRatioUpper && totalIdle >= 1 ether)
-            // Result: dlp ratio > 2.75%, collateral ratio = 200%
-            if (calc.dlpRatioCurrent < dlpRatioUpper || totalIdle < 1 ether) return;
-            // Deposit more and mint more
-            _mintMin(calc, _totalMinted, _totalDeposited, _totalDeposited + totalIdle);
-            return;
-        }
-
-        /** if (calc.collateralRatioCurrent > { collateralRatioIdeal }) **/
+        /** collateral ratio > { collateralRatioLower } **/
 
         // Minting disallowed by dlp ratio
         if (calc.dlpRatioCurrent < dlpRatioUpper) {
-            _withdrawNoPunish(_totalDeposited, _totalMinted);
-            // Result: dlp ratio > 2.75%, collateral ratio = 200%
+            // If dlp ratio required burning (line 260), i.e. dlp ratio = 3%
+            if (amountToBurnTotal > 0) _burnEUSD(amountToBurnTotal);
+
+            if (calc.collateralRatioCurrent > collateralRatioIdeal)
+                // Result: 2.75% < dlp ratio < 3.25% , collateral ratio = 200%
+                _withdrawNoPunish(_totalDeposited, _totalMinted);
+            // Result: 2.75% < dlp ratio < 3.25% , collateral ratio > 190%
             return;
         }
 
-        calc.mintAmountGivenDlp = _getMintAmountDeltaD(calc.currentLpValue, _totalMinted, calc.vaultWeight);
-        uint256 maxMintAmountWithoutDeposit = _getMintAmountDeltaC(_totalDeposited, _totalMinted);
+        /** dlp ratio >= { dlpRatioUpper }, collateral ratio > { collateralRatioIdeal } **/
+        uint256 _collateralRatioIdeal = collateralRatioIdeal;
+        if (calc.collateralRatioCurrent > _collateralRatioIdeal) {
+            // dlp ratio >= { dlpRatioUpper }, collateral ratio > { collateralRatioLower }
+            calc.mintAmountGivenDlp = _getMintAmountDeltaD(calc.currentLpValue, _totalMinted, calc.vaultWeight);
+            uint256 maxMintAmountWithoutDeposit = _getMintAmountDeltaC(_totalDeposited, _totalMinted);
 
-        // Can mint more by depositing more
-        if (calc.mintAmountGivenDlp > maxMintAmountWithoutDeposit) {
-            // Insufficient idle stETH, so mint only amount that doesn't require deposit
-            // Result: dlp ratio > 3%, collateral ratio = 200%
-            if (totalIdle < 1 ether) _mintEUSD(maxMintAmountWithoutDeposit);
-            // Deposit more and mint more
-            else _mintMin(calc, _totalMinted, _totalDeposited, _totalDeposited + totalIdle);
+            // Can mint more by depositing more
+            if (calc.mintAmountGivenDlp > maxMintAmountWithoutDeposit) {
+                // Insufficient idle stETH, so mint only amount that doesn't require deposit
+                // Result: dlp ratio > 3%, collateral ratio = 200%
+                if (totalIdle < 1 ether) _mintEUSD(maxMintAmountWithoutDeposit);
+                // Deposit more and mint more
+                else _mintMin(calc, _totalMinted, _totalDeposited, _totalDeposited + totalIdle);
+                return;
+            }
+
+            // Result: dlp ratio = 3%, collateral ratio >= 200%
+            _mintEUSD(calc.mintAmountGivenDlp);
+            if (maxMintAmountWithoutDeposit > calc.mintAmountGivenDlp) 
+                _withdrawNoPunish(_totalDeposited, _totalMinted + calc.mintAmountGivenDlp);
+
             return;
         }
 
-        // Result: dlp ratio = 3%, collateral ratio >= 200%
-        _mintEUSD(calc.mintAmountGivenDlp);
-        if (maxMintAmountWithoutDeposit > calc.mintAmountGivenDlp) 
-            _withdrawNoPunish(_totalDeposited, _totalMinted + calc.mintAmountGivenDlp);
-
+        /** dlp ratio >= { dlpRatioUpper }, { collateralRatioLower } < collateral ratio <= { collateralRatioIdeal } **/
+        if (totalIdle < 1 ether) return;
+        // Check whether collateral ratio is > 200% after depositing all idle stETH to make sure 
+        // the amount to mint, but not the amount to burn, is calculated for collaterael ratio in _mintMin()
+        // i.e. Only consider minting eUSD if collateral ratio after depositing all idle stETH > 200%
+        if(_getCollateralRatio(_totalDeposited + totalIdle, _totalMinted) > _collateralRatioIdeal)
+            _mintMin(calc, _totalMinted, _totalDeposited, _totalDeposited + totalIdle);
     }
 
     /**
@@ -710,15 +743,20 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
         if (amountActual > amountRecord) {
             amount = amountActual - amountRecord;
-            eUSD.safeTransfer(msg.sender, amount);
+            // Transfer only when there is at least 10 eUSD of reebase reward to save gas
+            if (amount > 10e18) eUSD.safeTransfer(msg.sender, amount);
         }
 
         return amount;
     }
 
-    function claimRewards() external {
-        ethlbrStakePool.getReward();
-        IMining(lybraConfigurator.eUSDMiningIncentives()).getReward();
+    function claimRewards(uint256 _rewardPoolId) external {
+        if (_rewardPoolId == 1) ethlbrStakePool.getReward();
+        else if (_rewardPoolId == 2) IMining(lybraConfigurator.eUSDMiningIncentives()).getReward();
+        else {
+            ethlbrStakePool.getReward();
+            IMining(lybraConfigurator.eUSDMiningIncentives()).getReward();
+        }
     }
 
     /**
@@ -732,7 +770,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     /**
      * @notice Get amount of eUSD borrow interest accrued since last update
      */
-    function _getAccInterest(address _account) private view returns (uint256) {
+    function getAccInterest(address _account) public view returns (uint256) {
         address mintPoolAddress = address(getMintPool());
 
         BorrowInfo memory info = borrowed[mintPoolAddress][_account];
@@ -840,6 +878,8 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     }
 
     function _mintEUSD(uint256 _amount) private {
+        if (_amount == 0) return;
+
         IMintPool mintPool = getMintPool();
         address mintPoolAddress = address(mintPool);
 
@@ -864,7 +904,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     }
 
     /**
-     * @notice Decides how much eUSD to mint, when dlp ratio >= { dlpRatioIdeal } && collateral ratio > { collateralRatioIdeal }
+     * @notice Decides how much eUSD to mint, when dlp ratio >= { dlpRatioUpper } && collateral ratio > { collateralRatioIdeal }
      * @dev _depositedAmount == _fullDeposit when idle stETH less than min. deposit requirement
      * @param _fullDeposit Max amount that can be deposited
      */
