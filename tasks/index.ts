@@ -8,7 +8,7 @@ const deployMock = require("./deploy/mock/mock");
 // Main
 const deployMatchPool = require("./deploy/MatchPool");
 const upgradeMatchPool = require("./upgrade/MatchPool");
-const matchPool = require("./MatchPool");
+const MatchPool = require("./MatchPool");
 
 export {
   accounts,
@@ -18,5 +18,5 @@ export {
   //
   deployMatchPool,
   upgradeMatchPool,
-  matchPool
+  MatchPool
 };

@@ -56,13 +56,37 @@ export const deployUpgradeable = async (
   artifact: string,
   params: Array<any>,
 ) => {
-  const factory: ContractFactory = <ContractFactory>await ethers.getContractFactory(artifact);
+  const FEE_DATA = {
+    maxFeePerGas: ethers.utils.parseUnits('8', 'gwei'),
+    maxPriorityFeePerGas: ethers.utils.parseUnits('3', 'gwei'),
+  };
+
+  // Wrap the provider so we can override fee data.
+  const provider = new ethers.providers.FallbackProvider([ethers.provider], 1);
+  provider.getFeeData = async () => FEE_DATA;
+
+  // Create the signer for the mnemonic, connected to the provider with hardcoded fee data
+  const signer = new ethers.Wallet(process.env.PRIVATE_KEY).connect(provider);
+
+  const factory: ContractFactory = <ContractFactory>await ethers.getContractFactory(artifact,signer);
   let contract: Contract = await upgrades.deployProxy(factory, params);
 
   return await contract.deployed();
 };
 
 export const upgrade = async (ethers: HardhatEthersHelpers, upgrades: any, artifact: string, address: string) => {
-  const factory: ContractFactory = <ContractFactory>await ethers.getContractFactory(artifact);
-  let contract: Contract = await upgrades.upgradeProxy(address, factory);
+  const FEE_DATA = {
+      maxFeePerGas: ethers.utils.parseUnits('6', 'gwei'),
+      maxPriorityFeePerGas: ethers.utils.parseUnits('3', 'gwei'),
+    };
+
+    // Wrap the provider so we can override fee data.
+    const provider = new ethers.providers.FallbackProvider([ethers.provider], 1);
+    provider.getFeeData = async () => FEE_DATA;
+
+    // Create the signer for the mnemonic, connected to the provider with hardcoded fee data
+    const signer = new ethers.Wallet(process.env.PRIVATE_KEY).connect(provider);
+
+    const factory: ContractFactory = <ContractFactory>await ethers.getContractFactory(artifact, signer);
+    let contract: Contract = await upgrades.upgradeProxy(address, factory);
 };
