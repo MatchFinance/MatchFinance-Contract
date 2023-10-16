@@ -8,6 +8,7 @@ declare module "mocha" {
     signers: Signers;
     matchPool: MatchPool;
     stakePool: StakePool;
+    mining: MiningIncentive;
     mintPool: MintPool;
     stETH: stETHMock;
   }
