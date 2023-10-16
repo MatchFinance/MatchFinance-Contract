@@ -102,6 +102,7 @@ contract StakePool is Ownable {
         uint256 reward = rewards[msg.sender];
         if (reward > 0) {
             rewards[msg.sender] = 0;
+            // rewardsToken.mint(msg.sender, reward);
             emit ClaimReward(msg.sender, reward, block.timestamp);
         }
     }

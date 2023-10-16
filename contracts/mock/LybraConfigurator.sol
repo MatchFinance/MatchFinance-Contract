@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "../interfaces/LybraInterfaces.sol";
 
 contract LybraConfigurator is Ownable {
-    IMining mining;
+    IMining public eUSDMiningIncentives;
     address EUSD;
     mapping(address => uint256) vaultWeight;
 
@@ -14,7 +14,7 @@ contract LybraConfigurator is Ownable {
     }
 
     function setMining(address _mining) external onlyOwner {
-        mining = IMining(_mining);
+        eUSDMiningIncentives = IMining(_mining);
     }
 
     function setVaultWeight(address pool, uint256 weight) external onlyOwner {
@@ -35,6 +35,6 @@ contract LybraConfigurator is Ownable {
     }
 
     function refreshMintReward(address _account) external {
-         mining.refreshReward(_account);
+         eUSDMiningIncentives.refreshReward(_account);
     }
 }
