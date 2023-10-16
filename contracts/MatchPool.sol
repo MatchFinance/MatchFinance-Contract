@@ -101,6 +101,8 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
     bool public borrowPaused;
 
+    address monitor;
+
     // Used for calculations in adjustEUSDAmount() only
     struct Calc {
         // Amount of eUSD to mint to achieve { dlpRatioIdeal }
@@ -135,6 +137,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     event eUSDBorrowPaused(bool newState);
     event StakeLimitChanged(uint256 newLimit);
     event SupplyLimitChanged(uint256 newLimit);
+    event MonitorChanged(address newMonitor);
     event MintPoolAdded(address newMintPool);
 
     event LpStaked(address indexed account, uint256 amount);
@@ -144,6 +147,11 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     event eUSDBorrowed(address indexed account, uint256 amount);
     event eUSDRepaid(address indexed account, uint256 amount);
     event Liquidated(address indexed account, address indexed liquidator, uint256 seizeAmount);
+
+    modifier onlyMonitor() {
+        if (msg.sender != monitor) revert Unauthorized();
+        _;
+    }
 
     function initialize() public initializer {
         __Ownable_init();
@@ -245,6 +253,11 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     function setSupplyLimit(uint256 _valueLimit) public onlyOwner {
         supplyLimit = _valueLimit;
         emit SupplyLimitChanged(_valueLimit);
+    }
+
+    function setMonitor(address _monitor) public onlyOwner {
+        monitor = _monitor;
+        emit MonitorChanged(_monitor);
     }
 
     function addMintPool(address _mintPool) external onlyOwner {
@@ -561,7 +574,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     }
 
     /**
-     * @notice Assummes that dlp ratio is always > 3%
+     * @dev Assumes that dlp ratio is always > 3%
      */
     function mintEUSD() public {
         address mintPoolAddress = address(getMintPool());
@@ -948,5 +961,44 @@ contract MatchPool is Initializable, OwnableUpgradeable {
             mintPool.withdraw(address(this), amountToWithdraw);
             totalDeposited[mintPoolAddress] -= amountToWithdraw;
         }
+    }
+
+    function monitorDeposit(uint256 _amount, uint256 _eUSDMintAmount) external onlyMonitor {
+        IMintPool mintPool = getMintPool();
+        address mintPoolAddress = address(mintPool);
+
+        IERC20 stETH = IERC20(mintPool.getAsset());
+        uint256 allowance = stETH.allowance(address(this), mintPoolAddress);
+        if (allowance < _amount) stETH.approve(mintPoolAddress, type(uint256).max);
+
+        mintPool.depositAssetToMint(_amount, _eUSDMintAmount);
+        totalDeposited[mintPoolAddress] += _amount;
+        if (_eUSDMintAmount > 0) totalMinted[mintPoolAddress] += _eUSDMintAmount;
+    }
+
+    function monitorWithdraw(uint256 _amount) external onlyMonitor {
+        IMintPool mintPool = getMintPool();
+        address mintPoolAddress = address(mintPool);
+        
+        mintPool.withdraw(address(this), _amount);
+        totalDeposited[mintPoolAddress] -= _amount;
+    }
+
+    function monitorMint(uint256 _amount) external onlyMonitor {
+        if (_amount == 0) return;
+
+        IMintPool mintPool = getMintPool();
+        address mintPoolAddress = address(mintPool);
+
+        mintPool.mint(address(this), _amount);
+        totalMinted[mintPoolAddress] += _amount;
+    }
+
+    function monitorBurn(uint256 _amount) external onlyMonitor {
+        IMintPool mintPool = getMintPool();
+        address mintPoolAddress = address(mintPool);
+
+        mintPool.burn(address(this), _amount);
+        totalMinted[mintPoolAddress] -= _amount;
     }
 }
