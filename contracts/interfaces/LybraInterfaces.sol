@@ -3,6 +3,7 @@
 pragma solidity ^0.8.19;
 
 interface IMining {
+    function stakedOf(address user) external view returns (uint256);
     function refreshReward(address user) external;
     function getReward() external;
 }
@@ -30,6 +31,7 @@ interface IMintPool {
 interface IConfigurator {
     function getVaultWeight(address pool) external view returns (uint256);
     function getEUSDAddress() external view returns (address);
+    function peUSD() external view returns(address);
     function refreshMintReward(address _account) external;
     function eUSDMiningIncentives() external view returns (address);
 }
