@@ -54,12 +54,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 
     // !! @modify Eric 20211030
     address public lybraProtocolRevenue;
-
     uint256 public pendingBoostReward;
-    uint256 public pendingProtocolRevenue;
-
-    address public peUSD;
-    address public USDC;
 
     event RewardShareChanged(uint128 newTreasuryShare, uint128 newStakerShare);
     event DLPRewardClaimed(address account, uint256 rewardAmount);
