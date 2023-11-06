@@ -437,6 +437,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
     ) private view returns (uint256, uint256) {
         uint256 totalToken;
         uint256 share;
+		// @note Cheap. Directly read.
         if (_rewardPool == dlpRewardPool) totalToken = matchPool.totalStaked();
         else if (_rewardPool == miningIncentive) (totalToken, share) = getEarningSupplies(_account);
         else if (_rewardPool == eUSD) (totalToken, share) = getRebaseSupplies(_account);

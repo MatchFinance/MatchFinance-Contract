@@ -59,7 +59,7 @@ contract MTokenStaking is OwnableUpgradeable {
 
     function setRewardManager(address _rewardManager) external onlyOwner {
         rewardManager = _rewardManager;
-    }
+    }   
 
     function stake(uint256 _amount) external {
         _stake(_amount, msg.sender);
@@ -75,6 +75,20 @@ contract MTokenStaking is OwnableUpgradeable {
 
     function delegateUnstake(address _to, uint256 _amount) external onlyRewardManager {
         _unstake(_amount, _to);
+    }
+
+    function compound() external {
+        UserInfo storage user = users[msg.sender];
+
+        uint256 pendingBoostReward = (user.stakedAmount * accBoostRewardPerMToken) / SCALE - user.boostRewardDebt;
+        uint256 pendingProtocolRevenue = (user.stakedAmount * accProtocolRevenuePerMToken) /
+            SCALE -
+            user.protocolRevenueDebt;
+
+        mToken.transfer(msg.sender, pendingBoostReward);
+        peUSD.transfer(msg.sender, pendingProtocolRevenue);
+
+        _stake(pendingBoostReward, msg.sender);
     }
 
     function _stake(uint256 _amount, address _user) internal {
