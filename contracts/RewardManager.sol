@@ -345,7 +345,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
         pendingBoostReward += boostReward;
     }
 
-    function getReward(address _rewardPool) public {
+    function getReward(address _rewardPool, bool _stakeNow) public {
         if (address(mesLBR) == address(0)) revert RewardNotOpen();
 
         // Cannot claim rewards if has not fully repaid eUSD/peUSD interest
@@ -363,6 +363,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
             if (rewardAmount > 0) {
                 userRewards[_dlpRewardPool][msg.sender] = 0;
                 mesLBR.mint(msg.sender, rewardAmount);
+                if (_stakeNow) stakingPool.delegateStake(msg.sender, rewardAmount);
                 emit DLPRewardClaimed(msg.sender, rewardAmount);
             }
 
@@ -376,6 +377,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
             if (rewardAmount > 0) {
                 userRewards[_miningIncentive][msg.sender] = 0;
                 mesLBR.mint(msg.sender, rewardAmount);
+                if (_stakeNow) stakingPool.delegateStake(msg.sender, rewardAmount);
                 emit LSDRewardClaimed(msg.sender, rewardAmount);
             }
 
@@ -421,9 +423,9 @@ contract RewardManager is Initializable, OwnableUpgradeable {
         pendingBoostReward = 0;
     }
 
-    function getAllRewards() external {
-        getReward(dlpRewardPool);
-        getReward(miningIncentive);
+    function getAllRewards(bool _stakeNow) external {
+        getReward(dlpRewardPool, _stakeNow);
+        getReward(miningIncentive, _stakeNow);
 
         // !! @modify Code added by Eric 20231030
         // Only update when users claim their rewards
