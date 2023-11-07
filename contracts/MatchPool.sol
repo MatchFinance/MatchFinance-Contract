@@ -6,6 +6,7 @@ import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/I
 import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 import "./interfaces/LybraInterfaces.sol";
@@ -107,6 +108,8 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     mapping(address => IDepositHelper) depositHelpers;
     mapping(address => bool) public isRebase;
 
+    IesLBRBoost public esLBRBoost;
+
     // Used for calculations in adjustEUSDAmount() only
     struct Calc {
         // Amount of eUSD to mint to achieve { dlpRatioIdeal }
@@ -127,6 +130,11 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         uint256 dlpRatioCurrent;
         uint256 collateralRatioCurrent;
     }
+
+      // !! @modify Code added by Eric 20231030
+      address public lybraProtocolRevenue;
+      address public peUSD;
+      address public stakingPool;
 
     event LPOracleChanged(address newOracle);
     event RewardManagerChanged(address newManager);
@@ -172,7 +180,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         setSupplyLimit(4000000e18);
     }
 
-    function getMintPools() public view returns(IMintPool[] memory) {
+    function getMintPools() public view returns (IMintPool[] memory) {
         return mintPools;
     }
 
@@ -180,12 +188,10 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         ethlbrLpToken = IERC20(_ethlbrLpToken);
     }
 
-    function setLybraContracts(
-        address _ethlbrStakePool,
-        address _configurator
-    ) external onlyOwner {
+    function setLybraContracts(address _ethlbrStakePool, address _configurator, address _boost) external onlyOwner {
         ethlbrStakePool = IStakePool(_ethlbrStakePool);
         lybraConfigurator = IConfigurator(_configurator);
+        esLBRBoost = IesLBRBoost(_boost);
     }
 
     function setLpOracle(address _lpOracle) external onlyOwner {
@@ -282,7 +288,9 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     function setRebase(address _mintPool, bool _isRebase) public onlyOwner {
         if (_isRebase) isRebase[_mintPool] = _isRebase;
     }
-    
+
+    // Only deposit ETH
+    // Transform to ETH/LBR LP token
     function zap() external payable {
         if (stakePaused) revert StakePaused();
 
@@ -292,9 +300,9 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         swapPath[1] = LBR;
         // Swap half of the ETH to LBR
         uint256[] memory amounts = ROUTER.swapExactETHForTokens{ value: ethToSwap }(
-            0, 
-            swapPath, 
-            address(this), 
+            0,
+            swapPath,
+            address(this),
             block.timestamp + 1
         );
         uint256 lbrAmount = amounts[1];
@@ -302,17 +310,17 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         // Add liquidity to get LP token
         uint256 ethToAdd = msg.value - ethToSwap;
         (uint256 lbrAdded, uint256 ethAdded, uint256 lpAmount) = ROUTER.addLiquidityETH{ value: ethToAdd }(
-            LBR, 
-            lbrAmount, 
-            0, 
-            0, 
-            address(this), 
+            LBR,
+            lbrAmount,
+            0,
+            0,
+            address(this),
             block.timestamp + 1
         );
 
         // Refund excess amounts if values of ETH and LBR swapped from ETH are not the same
         if (ethToAdd > ethAdded) {
-            (bool sent,) = (msg.sender).call{ value: ethToAdd - ethAdded }("");
+            (bool sent, ) = (msg.sender).call{ value: ethToAdd - ethAdded }("");
             require(sent, "ETH refund failed");
         }
 
@@ -377,7 +385,10 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         rewardManager.lsdUpdateReward(msg.sender, isRebase[mintPoolAddress]);
 
         uint256 amount = depositHelpers[mintPoolAddress].toLSD{ value: msg.value }();
-        if ((totalSupplied[mintPoolAddress] + amount) * mintPool.getAssetPrice() / 1e18 > supplyLimit && supplyLimit != 0) revert ExceedLimit();
+        if (
+            ((totalSupplied[mintPoolAddress] + amount) * mintPool.getAssetPrice()) / 1e18 > supplyLimit &&
+            supplyLimit != 0
+        ) revert ExceedLimit();
         supplied[mintPoolAddress][msg.sender] += amount;
         totalSupplied[mintPoolAddress] += amount;
 
@@ -390,7 +401,10 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         IMintPool mintPool = mintPools[_poolIndex];
         address mintPoolAddress = address(mintPool);
 
-        if ((totalSupplied[mintPoolAddress] + _amount) * mintPool.getAssetPrice() / 1e18 > supplyLimit && supplyLimit != 0) revert ExceedLimit();
+        if (
+            ((totalSupplied[mintPoolAddress] + _amount) * mintPool.getAssetPrice()) / 1e18 > supplyLimit &&
+            supplyLimit != 0
+        ) revert ExceedLimit();
 
         rewardManager.lsdUpdateReward(msg.sender, isRebase[mintPoolAddress]);
 
@@ -410,9 +424,11 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         uint256 tokenPrice = mintPool.getAssetPrice();
 
         uint256 borrowedEUSD = borrowed[mintPoolAddress][msg.sender].principal;
-        uint256 withdrawable = borrowedEUSD > 0 ?
-            supplied[mintPoolAddress][msg.sender] - borrowedEUSD * collateralRatioIdeal / maxBorrowRatio
-                * 1e18 / tokenPrice : supplied[mintPoolAddress][msg.sender];
+        uint256 withdrawable = borrowedEUSD > 0
+            ? supplied[mintPoolAddress][msg.sender] -
+                (((borrowedEUSD * collateralRatioIdeal) / maxBorrowRatio) * 1e18) /
+                tokenPrice
+            : supplied[mintPoolAddress][msg.sender];
 
         if (_amount > withdrawable) revert ExceedAmountAllowed(_amount, withdrawable);
         uint256 _totalDeposited = totalDeposited[mintPoolAddress];
@@ -424,7 +440,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         if (isRebasePool) {
             if (idleAmount > 0.01 ether) idleAmount -= 0.01 ether;
             else idleAmount = 0;
-        } 
+        }
 
         supplied[mintPoolAddress][msg.sender] -= _amount;
         totalSupplied[mintPoolAddress] -= _amount;
@@ -437,12 +453,18 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
             // Burn eUSD to withdraw LSD required
             if (withdrawFromLybra > withdrawableFromLybra) {
-                uint256 amountToBurn = _getMintAmountDeltaC(_totalDeposited - withdrawFromLybra, _totalMinted, tokenPrice);
+                uint256 amountToBurn = _getMintAmountDeltaC(
+                    _totalDeposited - withdrawFromLybra,
+                    _totalMinted,
+                    tokenPrice
+                );
                 _burnUSD(mintPoolAddress, amountToBurn);
             }
 
             // Get withdrawal amount after punishment (if any) from Lybra, accepted by user, only for stETH
-            uint256 actualAmount = isRebasePool ? mintPool.checkWithdrawal(address(this), withdrawFromLybra) : withdrawFromLybra;
+            uint256 actualAmount = isRebasePool
+                ? mintPool.checkWithdrawal(address(this), withdrawFromLybra)
+                : withdrawFromLybra;
             _withdrawFromLybra(mintPoolAddress, withdrawFromLybra);
 
             IERC20(mintPool.getAsset()).safeTransfer(msg.sender, idleAmount + actualAmount);
@@ -480,7 +502,8 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         totalBorrowed[mintPoolAddress] += _amount;
 
         // Greater than global borrow ratio threshold
-        uint256 globalBorrowRatio = totalBorrowed[mintPoolAddress] * 1e20 / _getMaxBorrow(totalSupplied[mintPoolAddress], tokenPrice);
+        uint256 globalBorrowRatio = (totalBorrowed[mintPoolAddress] * 1e20) /
+            _getMaxBorrow(totalSupplied[mintPoolAddress], tokenPrice);
         // Borrow amount has to be charged interest if global borrow ratio threshold is reached
         if (globalBorrowRatio >= globalBorrowRatioThreshold) {
             BorrowInfo storage info = borrowed[mintPoolAddress][msg.sender];
@@ -505,7 +528,8 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         bool isRebasePool = isRebase[mintPoolAddress];
 
         uint256 oldBorrowAmount = borrowed[mintPoolAddress][_account].principal;
-        uint256 newAccInterest = borrowed[mintPoolAddress][_account].accInterest + getAccInterest(mintPoolAddress, _account);
+        uint256 newAccInterest = borrowed[mintPoolAddress][_account].accInterest +
+            getAccInterest(mintPoolAddress, _account);
         IERC20 asset = isRebasePool ? IERC20(lybraConfigurator.getEUSDAddress()) : IERC20(lybraConfigurator.peUSD());
 
         // Just repaying interest
@@ -518,7 +542,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
                 borrowed[mintPoolAddress][_account].interestTimestamp = block.timestamp;
             } else {
                 // Delete info if repaid all
-                delete borrowed[mintPoolAddress][_account];  
+                delete borrowed[mintPoolAddress][_account];
             }
 
             emit USDRepaid(address(asset), _account, _amount);
@@ -540,8 +564,10 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         totalBorrowed[mintPoolAddress] -= (oldBorrowAmount - newBorrowAmount);
 
         // Prioritize repaying eUSD/peUSD portion that is charged interest first
-        borrowed[mintPoolAddress][_account].interestAmount = _amount > borrowed[mintPoolAddress][_account].interestAmount ? 
-            0 : borrowed[mintPoolAddress][_account].interestAmount - _amount;
+        borrowed[mintPoolAddress][_account].interestAmount = _amount >
+            borrowed[mintPoolAddress][_account].interestAmount
+            ? 0
+            : borrowed[mintPoolAddress][_account].interestAmount - _amount;
 
         if (spareAmount > 0) {
             asset.safeTransfer(rewardManager.treasury(), spareAmount);
@@ -569,17 +595,18 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         uint256 tokenPrice = mintPool.getAssetPrice();
 
         // Amount user has to borrow more than in order to be liquidated
-        uint256 liquidationThreshold = supplied[mintPoolAddress][_account] * tokenPrice * 100 / collateralRatioIdeal;
+        uint256 liquidationThreshold = (supplied[mintPoolAddress][_account] * tokenPrice * 100) / collateralRatioIdeal;
         uint256 userBorrowed = borrowed[mintPoolAddress][msg.sender].principal;
         if (userBorrowed <= liquidationThreshold) revert HealthyAccount();
 
-        uint256 globalBorrowRatio = totalBorrowed[mintPoolAddress] * 1e20 / _getMaxBorrow(totalSupplied[mintPoolAddress], tokenPrice);
-        uint256 _closeFactor = globalBorrowRatio < globalBorrowRatioLiuquidation ? 
-            closeFactor : closeFactorNormal;
-        uint256 _liquidationDiscount = globalBorrowRatio < globalBorrowRatioLiuquidation ? 
-            liquidationDiscount : liquidationDiscountNormal;
+        uint256 globalBorrowRatio = (totalBorrowed[mintPoolAddress] * 1e20) /
+            _getMaxBorrow(totalSupplied[mintPoolAddress], tokenPrice);
+        uint256 _closeFactor = globalBorrowRatio < globalBorrowRatioLiuquidation ? closeFactor : closeFactorNormal;
+        uint256 _liquidationDiscount = globalBorrowRatio < globalBorrowRatioLiuquidation
+            ? liquidationDiscount
+            : liquidationDiscountNormal;
 
-        uint256 maxRepay = userBorrowed * _closeFactor / 1e20;
+        uint256 maxRepay = (userBorrowed * _closeFactor) / 1e20;
         if (_repayAmount > maxRepay) revert ExceedAmountAllowed(_repayAmount, maxRepay);
 
         // Both liquidator's & liquidatee's supplied amount will be changed
@@ -587,7 +614,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         rewardManager.lsdUpdateReward(msg.sender, isRebasePool);
 
         repayUSD(_poolIndex, _account, _repayAmount);
-        uint256 seizeAmount = _repayAmount * _liquidationDiscount * 1e18 / 1e20 / tokenPrice;
+        uint256 seizeAmount = (_repayAmount * _liquidationDiscount * 1e18) / 1e20 / tokenPrice;
         supplied[mintPoolAddress][_account] -= seizeAmount;
         supplied[mintPoolAddress][msg.sender] += seizeAmount;
 
@@ -612,15 +639,25 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         }
 
         if (_getCollateralRatio(_totalDeposited, _totalMinted, tokenPrice) > _collateralRatioIdeal) {
-            if (totalIdle < 1 ether) _mintUSD(_mintPoolAddress, _getMintAmountDeltaC(_totalDeposited, _totalMinted, tokenPrice));
-            else _depositToLybra(_mintPoolAddress, totalIdle, _getMintAmountDeltaC(_totalDeposited + totalIdle, _totalMinted, tokenPrice));
+            if (totalIdle < 1 ether)
+                _mintUSD(_mintPoolAddress, _getMintAmountDeltaC(_totalDeposited, _totalMinted, tokenPrice));
+            else
+                _depositToLybra(
+                    _mintPoolAddress,
+                    totalIdle,
+                    _getMintAmountDeltaC(_totalDeposited + totalIdle, _totalMinted, tokenPrice)
+                );
             return;
         }
 
         if (totalIdle < 1 ether) return;
         // Can mint more after depositing more, even if current c.r. <= { collateralRatioIdeal }
         if (_getCollateralRatio(_totalDeposited + totalIdle, _totalMinted, tokenPrice) >= _collateralRatioIdeal) {
-            _depositToLybra(_mintPoolAddress, totalIdle, _getMintAmountDeltaC(_totalDeposited + totalIdle, _totalMinted, tokenPrice));
+            _depositToLybra(
+                _mintPoolAddress,
+                totalIdle,
+                _getMintAmountDeltaC(_totalDeposited + totalIdle, _totalMinted, tokenPrice)
+            );
         }
     }
 
@@ -678,7 +715,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     //             _burnEUSD(amountToBurnTotal);
     //             // Result: dlp ratio > 2.75%, collateral ratio = 200%
     //             return;
-    //         } 
+    //         }
 
     //         // Option 1
     //         calc.amountToDeposit = _getDepositAmountDelta(_totalDeposited, _totalMinted);
@@ -755,7 +792,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
     //         // Result: dlp ratio = 3%, collateral ratio >= 200%
     //         _mintEUSD(calc.mintAmountGivenDlp);
-    //         if (maxMintAmountWithoutDeposit > calc.mintAmountGivenDlp) 
+    //         if (maxMintAmountWithoutDeposit > calc.mintAmountGivenDlp)
     //             _withdrawNoPunish(_totalDeposited, _totalMinted + calc.mintAmountGivenDlp);
 
     //         return;
@@ -763,7 +800,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
     //     /** dlp ratio >= { dlpRatioUpper }, { collateralRatioLower } < collateral ratio <= { collateralRatioIdeal } **/
     //     if (totalIdle < 1 ether) return;
-    //     // Check whether collateral ratio is > 200% after depositing all idle stETH to make sure 
+    //     // Check whether collateral ratio is > 200% after depositing all idle stETH to make sure
     //     // the amount to mint, but not the amount to burn, is calculated for collaterael ratio in _mintMin()
     //     // i.e. Only consider minting eUSD if collateral ratio after depositing all idle stETH > 200%
     //     if(_getCollateralRatio(_totalDeposited + totalIdle, _totalMinted) > _collateralRatioIdeal)
@@ -781,13 +818,14 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         uint256 amountRecord;
         for (uint256 i; i < mintPools.length; ) {
             address mintPoolAddress = address(mintPools[i]);
-            if (isRebase[mintPoolAddress]) amountRecord += (totalMinted[mintPoolAddress] - totalBorrowed[mintPoolAddress]); 
+            if (isRebase[mintPoolAddress])
+                amountRecord += (totalMinted[mintPoolAddress] - totalBorrowed[mintPoolAddress]);
 
             unchecked {
                 ++i;
             }
         }
-        
+
         uint256 amount;
         if (amountActual > amountRecord) {
             amount = amountActual - amountRecord;
@@ -807,11 +845,15 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         }
     }
 
+    function boostReward(uint256 _settingId, uint256 _amount) external onlyOwner {
+        esLBRBoost.setLockStatus(_settingId, _amount, false);
+    }
+
     /**
      * @notice Get max. amount of eUSD/peUSD that can be borrowed given amount of LSD supplied
      */
     function _getMaxBorrow(uint256 _suppliedAmount, uint256 _price) private view returns (uint256) {
-        return _suppliedAmount * _price * maxBorrowRatio / collateralRatioIdeal / 1e18;
+        return (_suppliedAmount * _price * maxBorrowRatio) / collateralRatioIdeal / 1e18;
     }
 
     /**
@@ -820,7 +862,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     function getAccInterest(address _mintPool, address _account) public view returns (uint256) {
         BorrowInfo memory info = borrowed[_mintPool][_account];
         uint256 timeDelta = block.timestamp - info.interestTimestamp;
-        return info.interestAmount * borrowRatePerSec * timeDelta / 1e18;
+        return (info.interestAmount * borrowRatePerSec * timeDelta) / 1e18;
     }
 
     /**
@@ -829,15 +871,19 @@ contract MatchPool is Initializable, OwnableUpgradeable {
      * @param _mintedAmount Amount of eUSD/peUSD minted
      * @return Collateral ratio based on given params
      */
-    function _getCollateralRatio(uint256 _depositedAmount, uint256 _mintedAmount, uint256 _price) private view returns (uint256) {
+    function _getCollateralRatio(
+        uint256 _depositedAmount,
+        uint256 _mintedAmount,
+        uint256 _price
+    ) private view returns (uint256) {
         if (_mintedAmount == 0) return collateralRatioIdeal;
-        else return _depositedAmount * _price * 100 / _mintedAmount;
+        else return (_depositedAmount * _price * 100) / _mintedAmount;
     }
 
     function _getDlpRatio(uint256 _lpValue) private view returns (uint256) {
         uint256 mintedAmount = IMining(lybraConfigurator.eUSDMiningIncentives()).stakedOf(address(this));
         if (mintedAmount == 0) return dlpRatioIdeal;
-        return _lpValue * 10000 / mintedAmount;
+        return (_lpValue * 10000) / mintedAmount;
     }
 
     /**
@@ -846,10 +892,16 @@ contract MatchPool is Initializable, OwnableUpgradeable {
      * @return Amount of LSD to deposit to/withdraw from Lybra vault in order to achieve { collateralRatioIdeal }
      *  1st condition -> deposit amount, 2nd condition -> withdraw amount
      */
-    function _getDepositAmountDelta(uint256 _depositedAmount, uint256 _mintedAmount, uint256 _price) private view returns (uint256) {
-        uint256 newDepositedAmount = collateralRatioIdeal * _mintedAmount / _price / 100; 
-        return newDepositedAmount > _depositedAmount ?
-            newDepositedAmount - _depositedAmount : _depositedAmount - newDepositedAmount;
+    function _getDepositAmountDelta(
+        uint256 _depositedAmount,
+        uint256 _mintedAmount,
+        uint256 _price
+    ) private view returns (uint256) {
+        uint256 newDepositedAmount = (collateralRatioIdeal * _mintedAmount) / _price / 100;
+        return
+            newDepositedAmount > _depositedAmount
+                ? newDepositedAmount - _depositedAmount
+                : _depositedAmount - newDepositedAmount;
     }
 
     /**
@@ -858,10 +910,13 @@ contract MatchPool is Initializable, OwnableUpgradeable {
      * @return Amount of eUSD/peUSD to mint from/repay to Lybra vault in order to achieve { collateralRatioIdeal }
      *  1st condition -> mint amount, 2nd condition -> burn amount
      */
-    function _getMintAmountDeltaC(uint256 _depositedAmount, uint256 _mintedAmount, uint256 _price) private view returns (uint256) {
-        uint256 newMintedAmount = _depositedAmount * _price * 100 / collateralRatioIdeal;
-        return newMintedAmount > _mintedAmount ?
-            newMintedAmount - _mintedAmount : _mintedAmount - newMintedAmount;
+    function _getMintAmountDeltaC(
+        uint256 _depositedAmount,
+        uint256 _mintedAmount,
+        uint256 _price
+    ) private view returns (uint256) {
+        uint256 newMintedAmount = (_depositedAmount * _price * 100) / collateralRatioIdeal;
+        return newMintedAmount > _mintedAmount ? newMintedAmount - _mintedAmount : _mintedAmount - newMintedAmount;
     }
 
     /**
@@ -872,18 +927,20 @@ contract MatchPool is Initializable, OwnableUpgradeable {
      */
     function _getMintAmountDeltaD(uint256 _lpValue, uint256 _vaultWeight) private view returns (uint256) {
         uint256 oldMintedValue = IMining(lybraConfigurator.eUSDMiningIncentives()).stakedOf(address(this));
-        uint256 newMintedValue = _lpValue * 10000 / dlpRatioIdeal;
-        return newMintedValue > oldMintedValue ? 
-            (newMintedValue - oldMintedValue) * 1e20 / _vaultWeight : (oldMintedValue - newMintedValue) * 1e20 / _vaultWeight;
+        uint256 newMintedValue = (_lpValue * 10000) / dlpRatioIdeal;
+        return
+            newMintedValue > oldMintedValue
+                ? ((newMintedValue - oldMintedValue) * 1e20) / _vaultWeight
+                : ((oldMintedValue - newMintedValue) * 1e20) / _vaultWeight;
     }
- 
+
     /**
      * @param _lpTokenAmount Amount of LP tokens
      * @return The value of staked LP tokens in the ETH-LBR liquidity pool
      */
     function getLpValue(uint256 _lpTokenAmount) public view returns (uint256) {
         (, int lpPrice, , , ) = lpPriceFeed.latestRoundData();
-        return _lpTokenAmount * uint256(lpPrice) / 1e8;
+        return (_lpTokenAmount * uint256(lpPrice)) / 1e8;
     }
 
     function _depositNoCheck(address _mintPoolAddress, uint256 _amount, uint256 _usdMintAmount) private {
@@ -907,7 +964,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         _depositNoCheck(_mintPoolAddress, _amount, _usdMintAmount);
     }
 
-    /** 
+    /**
      * @notice Match Finance will only withdraw spare LSD from Lybra when there is no punishment.
      *  Punished withdrawals will only be initiated by users whole are willing to take the loss,
      *  as totalSupplied and totalDeposited are updated in the same tx for such situation,
@@ -917,7 +974,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         IMintPool mintPool = IMintPool(_mintPoolAddress);
 
         uint256 collateralRatioAfter = _getCollateralRatio(
-            totalDeposited[_mintPoolAddress] - _amount, 
+            totalDeposited[_mintPoolAddress] - _amount,
             totalMinted[_mintPoolAddress],
             mintPool.getAssetPrice()
         );
@@ -958,9 +1015,9 @@ contract MatchPool is Initializable, OwnableUpgradeable {
      * @param _fullDeposit Max amount that can be deposited
      */
     function _mintMin(
-        Calc memory calc, 
-        uint256 _mintedAmount, 
-        uint256 _depositedAmount, 
+        Calc memory calc,
+        uint256 _mintedAmount,
+        uint256 _depositedAmount,
         uint256 _fullDeposit,
         address _mintPoolAddress
     ) private {
@@ -970,7 +1027,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         calc.mintAmountGivenDlp = _getMintAmountDeltaD(calc.currentLpValue, calc.vaultWeight);
         // Amount to mint to achieve { collateralRatioIdeal } after depositing all idle stETH
         calc.mintAmountGivenCollateral = _getMintAmountDeltaC(_fullDeposit, _mintedAmount, tokenPrice);
-            
+
         // Mint: min(mintAmountGivenDlp, mintAmountGivenCollateral)
         if (calc.mintAmountGivenDlp > calc.mintAmountGivenCollateral) {
             _depositToLybra(_mintPoolAddress, _fullDeposit - _depositedAmount, calc.mintAmountGivenCollateral);
@@ -979,7 +1036,11 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         }
 
         // Amount to deposit for 200% colalteral ratio given that { mintAmountGivenDlp } eUSD will be minted
-        calc.amountToDeposit = _getDepositAmountDelta(_depositedAmount, _mintedAmount + calc.mintAmountGivenDlp, tokenPrice);
+        calc.amountToDeposit = _getDepositAmountDelta(
+            _depositedAmount,
+            _mintedAmount + calc.mintAmountGivenDlp,
+            tokenPrice
+        );
         // Accept over-collateralization, i.e. deposit at least 1 ether
         _depositToLybra(_mintPoolAddress, _max(calc.amountToDeposit, 1 ether), calc.mintAmountGivenDlp);
         // Result: dlp ratio = 3%, collateral ratio >= 200%
@@ -1018,5 +1079,16 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
     function monitorBurn(address _mintPoolAddress, uint256 _amount) external onlyMonitor {
         _burnUSD(_mintPoolAddress, _amount);
+    }
+
+    // !! @modify Code added by Eric 20231030
+    function claimProtocolRevenue() external {
+        require(msg.sender == address(rewardManager));
+
+        IRewardPool(lybraProtocolRevenue).getReward(address(this));
+
+        // TODO: use balanceOf.address(this) or lybraProtocolRevenue.earned() ???
+        // Still not decided
+        IERC20(peUSD).transfer(stakingPool, IERC20(peUSD).balanceOf(address(this)));
     }
 }
