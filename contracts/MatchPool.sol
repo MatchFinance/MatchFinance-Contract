@@ -6,6 +6,7 @@ import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/I
 import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 import "./interfaces/LybraInterfaces.sol";
@@ -107,6 +108,8 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     mapping(address => IDepositHelper) depositHelpers;
     mapping(address => bool) public isRebase;
 
+    IesLBRBoost public esLBRBoost;
+
     // Used for calculations in adjustEUSDAmount() only
     struct Calc {
         // Amount of eUSD to mint to achieve { dlpRatioIdeal }
@@ -185,9 +188,10 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         ethlbrLpToken = IERC20(_ethlbrLpToken);
     }
 
-    function setLybraContracts(address _ethlbrStakePool, address _configurator) external onlyOwner {
+    function setLybraContracts(address _ethlbrStakePool, address _configurator, address _boost) external onlyOwner {
         ethlbrStakePool = IStakePool(_ethlbrStakePool);
         lybraConfigurator = IConfigurator(_configurator);
+        esLBRBoost = IesLBRBoost(_boost);
     }
 
     function setLpOracle(address _lpOracle) external onlyOwner {
@@ -839,6 +843,10 @@ contract MatchPool is Initializable, OwnableUpgradeable {
             ethlbrStakePool.getReward();
             IMining(lybraConfigurator.eUSDMiningIncentives()).getReward();
         }
+    }
+
+    function boostReward(uint256 _settingId, uint256 _amount) external onlyOwner {
+        esLBRBoost.setLockStatus(_settingId, _amount, false);
     }
 
     /**
