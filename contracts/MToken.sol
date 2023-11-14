@@ -22,7 +22,7 @@ import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/O
 contract MToken is ERC20Upgradeable, OwnableUpgradeable {
     mapping(address account => bool isValidMinter) public isMinter;
 
-    function iniatialize(string memory name_, string memory symbol_) external initializer {
+    function initialize(string memory name_, string memory symbol_) external initializer {
         __ERC20_init(name_, symbol_);
         __Ownable_init();
     }
