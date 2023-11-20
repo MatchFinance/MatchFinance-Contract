@@ -2,9 +2,9 @@ import { task } from "hardhat/config";
 import type { TaskArguments } from "hardhat/types";
 
 import { readAddressList, readArgs, storeArgs } from "../../scripts/contractAddress";
-import { upgrade, getNetwork } from "../helpers";
+import { upgrade, getNetwork, validateUpgrade } from "../helpers";
 
-task("upgrade:MatchPool", "Upgrade MatchPool contract")
+task("upgrade:MatchPool", "Deploy new Match Pool implementation contract")
   .setAction(async function (_, { ethers, upgrades }) {
     const hre = require("hardhat");
     const network = getNetwork();
@@ -12,12 +12,12 @@ task("upgrade:MatchPool", "Upgrade MatchPool contract")
 
     console.log("Upgrading...");
 
-    await upgrade(ethers, upgrades, "MatchPool", addressList.MatchPool);
+    const res = await upgrade(ethers, upgrades, "MatchPool", addressList.MatchPool);
 
-    console.log(`MatchPool upgraded on ${network}`);
+    console.log(`New Match Pool implementation deployed on ${network} at ${res}`);
   });
 
-task("upgrade:RewardManager", "Upgrade Reward Manager contract")
+task("upgrade:RewardManager", "Deploy new Reward Manager implementation contract")
   .setAction(async function (_, { ethers, upgrades }) {
     const hre = require("hardhat");
     const network = getNetwork();
@@ -25,7 +25,7 @@ task("upgrade:RewardManager", "Upgrade Reward Manager contract")
 
     console.log("Upgrading...");
 
-    await upgrade(ethers, upgrades, "RewardManager", addressList.RewardManager);
+    const res = await upgrade(ethers, upgrades, "RewardManager", addressList.RewardManager);
 
-    console.log(`Reward Manager upgraded on ${network}`);
+    console.log(`New Reward Manager implementation deployed on ${network} at ${res}`);
   });

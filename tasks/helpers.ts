@@ -76,8 +76,8 @@ export const deployUpgradeable = async (
 
 export const upgrade = async (ethers: HardhatEthersHelpers, upgrades: any, artifact: string, address: string) => {
   const FEE_DATA = {
-      maxFeePerGas: ethers.utils.parseUnits('6', 'gwei'),
-      maxPriorityFeePerGas: ethers.utils.parseUnits('3', 'gwei'),
+      maxFeePerGas: ethers.utils.parseUnits('22', 'gwei'),
+      maxPriorityFeePerGas: ethers.utils.parseUnits('1', 'gwei'),
     };
 
     // Wrap the provider so we can override fee data.
@@ -88,5 +88,6 @@ export const upgrade = async (ethers: HardhatEthersHelpers, upgrades: any, artif
     const signer = new ethers.Wallet(process.env.PRIVATE_KEY).connect(provider);
 
     const factory: ContractFactory = <ContractFactory>await ethers.getContractFactory(artifact, signer);
-    let contract: Contract = await upgrades.upgradeProxy(address, factory);
+    let contract: Contract = await upgrades.prepareUpgrade(address, factory);
+    return contract;
 };
