@@ -146,7 +146,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 
 		if (_account == address(0)) return;
 
-		userRewards[_dlpRewardPool][_account] = _earned(_account, _dlpRewardPool, dlpEarned + toStaker);
+		userRewards[_dlpRewardPool][_account] = _earned(_account, _dlpRewardPool, 0);
 		userRewardsPerTokenPaid[_dlpRewardPool][_account] = rewardPerTokenStored[_dlpRewardPool];
 	}
 
@@ -177,14 +177,14 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 
 		if (_account == address(0)) return;
 
-		userRewards[_miningIncentive][_account] = _earned(_account, _miningIncentive, toSupplier);
+		userRewards[_miningIncentive][_account] = _earned(_account, _miningIncentive, 0);
 		userRewardsPerTokenPaid[_miningIncentive][_account] = rewardPerTokenStored[_miningIncentive];
 
 		if (eusdEarned > 0) {
 			(uint256 borrowedAmount,,,) = matchPool.borrowed(address(matchPool.getMintPool()), _account);
-			if (borrowedAmount == 0) userRewards[_eUSD][_account] = _earned(_account, _eUSD, eusdEarned);
+			if (borrowedAmount == 0) userRewards[_eUSD][_account] = _earned(_account, _eUSD, 0);
 			// Users who borrowed eUSD will not share rebase reward
-			else userRewards[_eUSD][treasury] += (_earned(_account, _eUSD, eusdEarned) - userRewards[_eUSD][_account]);
+			else userRewards[_eUSD][treasury] += (_earned(_account, _eUSD, 0) - userRewards[_eUSD][_account]);
 
 			userRewardsPerTokenPaid[_eUSD][_account] = rewardPerTokenStored[_eUSD];
 		}
