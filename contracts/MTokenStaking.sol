@@ -50,6 +50,11 @@ contract MTokenStaking is OwnableUpgradeable {
 
     function initialize() external initializer {
         __Ownable_init();
+
+        rewardManager = _rewardManager;
+        mToken = IERC20(_mToken);
+        esLBR = IERC20(_esLBR);
+        peUSD = IERC20(_peUSD);
     }
 
     modifier onlyRewardManager() {
@@ -59,7 +64,28 @@ contract MTokenStaking is OwnableUpgradeable {
 
     function setRewardManager(address _rewardManager) external onlyOwner {
         rewardManager = _rewardManager;
-    }   
+    }
+
+    modifier onlyRewardManager() {
+        if (msg.sender != rewardManager) revert NotRewardManager();
+        _;
+    }
+
+    function setRewardManager(address _rewardManager) external onlyOwner {
+        rewardManager = _rewardManager;
+    }
+
+    function setMToken(address _mToken) external onlyOwner {
+        mToken = IERC20(_mToken);
+    }
+
+    function setESLBR(address _esLBR) external onlyOwner {
+        esLBR = IERC20(_esLBR);
+    }
+
+    function setPEUSD(address _peUSD) external onlyOwner {
+        peUSD = IERC20(_peUSD);
+    }
 
     function stake(uint256 _amount) external {
         _stake(_amount, msg.sender);
