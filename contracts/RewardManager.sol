@@ -188,11 +188,16 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 
         if (_account == address(0)) {
             for (uint256 i; i < mintPools.length; ) {
-                address mintPoolAddress = address(mintPools[i]);
+                IMintPool mintPool = IMintPool(mintPools[i]);
+                address mintPoolAddress = address(mintPool);
                 if (
                     matchPool.isRebase(mintPoolAddress) &&
                     matchPool.totalMinted(mintPoolAddress) > 0
-                ) total += matchPool.totalSupplied(mintPoolAddress);
+                ) {
+                    // stETH pool
+                    if (i == 0) total += matchPool.totalSupplied(mintPoolAddress);
+                    else total += matchPool.totalSuppliedReward(mintPoolAddress);
+                }
 
                 unchecked {
                     ++i;
@@ -200,13 +205,20 @@ contract RewardManager is Initializable, OwnableUpgradeable {
             }
         } else {
             for (uint256 i; i < mintPools.length; ) {
-                address mintPoolAddress = address(mintPools[i]);
+                IMintPool mintPool = IMintPool(mintPools[i]);
+                address mintPoolAddress = address(mintPool);
                 if (
                     matchPool.isRebase(mintPoolAddress) &&
                     matchPool.totalMinted(mintPoolAddress) > 0
                 ) {
-                    total += matchPool.totalSupplied(mintPoolAddress);
-                    individual += matchPool.supplied(mintPoolAddress, _account);
+                    // stETH pool
+                    if (i == 0) {
+                        total += matchPool.totalSupplied(mintPoolAddress);
+                        individual += matchPool.supplied(mintPoolAddress, _account);
+                    } else {
+                        total += matchPool.totalSuppliedReward(mintPoolAddress);
+                        individual += matchPool.suppliedReward(mintPoolAddress, _account);
+                    }
                 }
 
                 unchecked {
@@ -227,9 +239,13 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 
         if (_account == address(0)) {
             for (uint256 i; i < mintPools.length; ) {
-                address mintPoolAddress = mintPools[i];
-                if (matchPool.totalMinted(mintPoolAddress) > 0)
-                    total += matchPool.totalSupplied(mintPoolAddress);
+                IMintPool mintPool = IMintPool(mintPools[i]);
+                address mintPoolAddress = address(mintPool);
+                if (matchPool.totalMinted(mintPoolAddress) > 0) {
+                    // stETH pool
+                    if (i == 0) total += matchPool.totalSupplied(mintPoolAddress);
+                    else total += matchPool.totalSuppliedReward(mintPoolAddress)
+                }
 
                 unchecked {
                     ++i;
@@ -237,10 +253,17 @@ contract RewardManager is Initializable, OwnableUpgradeable {
             }
         } else {
             for (uint256 i; i < mintPools.length; ) {
-                address mintPoolAddress = mintPools[i];
+                IMintPool mintPool = IMintPool(mintPools[i]);
+                address mintPoolAddress = address(mintPool);
                 if (matchPool.totalMinted(mintPoolAddress) > 0) {
-                    total += matchPool.totalSupplied(mintPoolAddress);
-                    individual += matchPool.supplied(mintPoolAddress, _account);
+                    // stETH pool
+                    if (i == 0) {
+                        total += matchPool.totalSupplied(mintPoolAddress);
+                        individual += matchPool.supplied(mintPoolAddress, _account);
+                    } else {
+                        total += matchPool.totalSuppliedReward(mintPoolAddress);
+                        individual += matchPool.suppliedReward(mintPoolAddress, _account);
+                    }
                 }
 
                 unchecked {
@@ -261,6 +284,14 @@ contract RewardManager is Initializable, OwnableUpgradeable {
     function setMiningRewardPools(address _mining, address _eUSD) external onlyOwner {
         miningIncentive = _mining;
         eUSD = _eUSD;
+    }
+
+    function setProtocolRevenuePool(address _protocolRevenue) external onlyOwner {
+        lybraProtocolRevenue = _protocolRevenue;
+    }
+
+    function setMeslbrStakingPool(address _stakingPool) external onlyOwner {
+        stakingPool = IStakingPool(_stakingPool);
     }
 
     function setMiningRewardShares(
@@ -328,11 +359,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 
         if (_account == address(0)) return;
 
-        userRewards[_dlpRewardPool][_account] = _earned(
-            _account,
-            _dlpRewardPool,
-            dlpEarned + toStaker
-        );
+        userRewards[_dlpRewardPool][_account] = _earned(_account, _dlpRewardPool, 0);
         userRewardsPerTokenPaid[_dlpRewardPool][_account] = rewardPerTokenStored[
             _dlpRewardPool
         ];
@@ -382,21 +409,17 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 
         if (_account == address(0)) return;
 
-        userRewards[_miningIncentive][_account] = _earned(
-            _account,
-            _miningIncentive,
-            toSupplier
-        );
+        userRewards[_miningIncentive][_account] = _earned(_account, _miningIncentive, 0);
         userRewardsPerTokenPaid[_miningIncentive][_account] = rewardPerTokenStored[
             _miningIncentive
         ];
 
         if (_isRebase) {
             if (!hasBorrwedEUSD(_account))
-                userRewards[_eUSD][_account] = _earned(_account, _eUSD, eusdEarned);
+                userRewards[_eUSD][_account] = _earned(_account, _eUSD, 0);
                 // Users who borrowed eUSD will not share rebase reward
             else
-                userRewards[_eUSD][treasury] += (_earned(_account, _eUSD, eusdEarned) -
+                userRewards[_eUSD][treasury] += (_earned(_account, _eUSD, 0) -
                     userRewards[_eUSD][_account]);
             userRewardsPerTokenPaid[_eUSD][_account] = rewardPerTokenStored[_eUSD];
         }
@@ -533,8 +556,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
         if (_rewardPool == dlpRewardPool) share = matchPool.staked(_account);
 
         return
-            (share * (rpt - userRewardsPerTokenPaid[_rewardPool][_account])) /
-            1e18 +
+            (share * (rpt - userRewardsPerTokenPaid[_rewardPool][_account])) / 1e18 +
             userRewards[_rewardPool][_account];
     }
 }

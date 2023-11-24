@@ -75,7 +75,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
     uint256 public maxBorrowRatio; // 80e18, scaled by 1e20
     uint256 public globalBorrowRatioThreshold; // 75e18, scaled by 1e20
-    uint256 public globalBorrowRatioLiuquidation; // 50e18, scaled by 1e20
+    uint256 public globalBorrowRatioLiquidation; // 50e18, scaled by 1e20
 
     // When global borrow ratio < 50%
     uint128 public liquidationDiscount; // 105e18, scaled by 1e20
@@ -88,7 +88,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     uint256 public dlpRatioLower; // 275
     uint256 public dlpRatioIdeal; // 300
     uint256 public collateralRatioUpper; // 210e18
-    uint256 public collateralRatioLower; // 190e18
+    uint256 public collateralRatioLiquidate; // 150e18
     uint256 public collateralRatioIdeal; // 200e18
 
     bool public stakePaused;
@@ -133,8 +133,11 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
     // !! @modify Code added by Eric 20231030
     address public lybraProtocolRevenue;
-    address public peUSD;
     address public stakingPool;
+
+    // Record supply amounts in terms of stETH for reward calculation
+    mapping(address => uint256) public totalSuppliedReward;
+    mapping(address => mapping(address => uint256)) public suppliedReward;
 
     // ---------------------------------------------------------------------------------------- //
     // *************************************** Events ***************************************** //
@@ -143,7 +146,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     event LPOracleChanged(address newOracle);
     event RewardManagerChanged(address newManager);
     event DlpRatioChanged(uint256 newLower, uint256 newUpper, uint256 newIdeal);
-    event CollateralRatioChanged(uint256 newLower, uint256 newUpper, uint256 newIdeal);
+    event CollateralRatioChanged(uint256 newLiquidate, uint256 newUpper, uint256 newIdeal);
     event BorrowRateChanged(uint256 newRate);
     event BorrowRatioChanged(
         uint256 newMax,
@@ -195,7 +198,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         setDlpRatioRange(275, 325, 300);
         setCollateralRatioRange(190e18, 210e18, 200e18);
         setBorrowRate(1e17);
-        setBorrowRatio(85e18, 75e18, 50e18);
+        setBorrowRatio(80e18, 75e18, 50e18);
         setLiquidationParams(105e18, 20e18);
         setLiquidationParamsNormal(110e18, 50e18);
         setStakeLimit(60000e18);
@@ -242,11 +245,17 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     function setLybraContracts(
         address _ethlbrStakePool,
         address _configurator,
-        address _boost
+        address _boost,
+        address _protocolRevenue
     ) external onlyOwner {
         ethlbrStakePool = IStakePool(_ethlbrStakePool);
         lybraConfigurator = IConfigurator(_configurator);
         esLBRBoost = IesLBRBoost(_boost);
+        lybraProtocolRevenue = _protocolRevenue;
+    }
+
+    function setMeslbrStakingPool(address _stakingPool) external onlyOwner {
+        stakingPool = _stakingPool;
     }
 
     function setLpOracle(address _lpOracle) external onlyOwner {
@@ -271,14 +280,14 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     }
 
     function setCollateralRatioRange(
-        uint256 _lower,
+        uint256 _liquidate,
         uint256 _upper,
         uint256 _ideal
     ) public onlyOwner {
-        collateralRatioLower = _lower;
+        collateralRatioLiquidate = _liquidate;
         collateralRatioUpper = _upper;
         collateralRatioIdeal = _ideal;
-        emit CollateralRatioChanged(_lower, _upper, _ideal);
+        emit CollateralRatioChanged(_liquidate, _upper, _ideal);
     }
 
     function setBorrowRate(uint256 _borrowRatePerYear) public onlyOwner {
@@ -293,7 +302,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     ) public onlyOwner {
         maxBorrowRatio = _individual;
         globalBorrowRatioThreshold = _global;
-        globalBorrowRatioLiuquidation = _liquidation;
+        globalBorrowRatioLiquidation = _liquidation;
         emit BorrowRatioChanged(_individual, _global, _liquidation);
     }
 
@@ -479,6 +488,16 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         supplied[mintPoolAddress][msg.sender] += amount;
         totalSupplied[mintPoolAddress] += amount;
 
+        if (poolIndex > 0) {
+            // Store supply amount in terms of stETH
+            uint256 newSuppliedReward = supplied[mintPoolAddress][msg.sender] * 
+                mintPool.getAsset2EtherExchangeRate() / 1e18;
+            totalSuppliedReward[mintPoolAddress] += (
+                newSuppliedReward - suppliedReward[mintPoolAddress][msg.sender]
+            );
+            suppliedReward[mintPoolAddress][msg.sender] = newSuppliedReward;
+        }
+
         emit ETHSupplied(mintPoolAddress, msg.sender, msg.value);
 
         mintUSD(mintPoolAddress);
@@ -498,6 +517,16 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         IERC20(mintPool.getAsset()).safeTransferFrom(msg.sender, address(this), _amount);
         supplied[mintPoolAddress][msg.sender] += _amount;
         totalSupplied[mintPoolAddress] += _amount;
+
+        // Store supply amount in terms of stETH
+        if (poolIndex > 0) {
+            uint256 newSuppliedReward = supplied[mintPoolAddress][msg.sender] * 
+                mintPool.getAsset2EtherExchangeRate() / 1e18;
+            totalSuppliedReward[mintPoolAddress] += (
+                newSuppliedReward - suppliedReward[mintPoolAddress][msg.sender]
+            );
+            suppliedReward[mintPoolAddress][msg.sender] = newSuppliedReward;
+        }
 
         emit LSDSupplied(mintPoolAddress, msg.sender, _amount);
 
@@ -531,6 +560,16 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
         supplied[mintPoolAddress][msg.sender] -= _amount;
         totalSupplied[mintPoolAddress] -= _amount;
+
+        // Store supply amount in terms of stETH
+        if (poolIndex > 0) {
+            uint256 newSuppliedReward = supplied[mintPoolAddress][msg.sender] * 
+                mintPool.getAsset2EtherExchangeRate() / 1e18;
+            totalSuppliedReward[mintPoolAddress] -= (
+                suppliedReward[mintPoolAddress][msg.sender] - newSuppliedReward
+            );
+            suppliedReward[mintPoolAddress][msg.sender] = newSuppliedReward;
+        }
 
         // Withdraw additional LSD from Lybra vault if contract does not have enough idle LSD
         if (idleAmount < _amount) {
@@ -695,45 +734,45 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         mintUSD(mintPoolAddress);
     }
 
-    function liquidate(
-        uint256 _poolIndex,
-        address _account,
-        uint256 _repayAmount
-    ) external {
-        IMintPool mintPool = mintPools[_poolIndex];
-        address mintPoolAddress = address(mintPool);
-        bool isRebasePool = isRebase[mintPoolAddress];
-        uint256 tokenPrice = mintPool.getAssetPrice();
+    // function liquidate(
+    //     uint256 _poolIndex,
+    //     address _account,
+    //     uint256 _repayAmount
+    // ) external {
+    //     IMintPool mintPool = mintPools[_poolIndex];
+    //     address mintPoolAddress = address(mintPool);
+    //     bool isRebasePool = isRebase[mintPoolAddress];
+    //     uint256 tokenPrice = mintPool.getAssetPrice();
 
-        // Amount user has to borrow more than in order to be liquidated
-        uint256 liquidationThreshold = (supplied[mintPoolAddress][_account] *
-            tokenPrice * 100) / collateralRatioIdeal;
-        uint256 userBorrowed = borrowed[mintPoolAddress][msg.sender].principal;
-        if (userBorrowed <= liquidationThreshold) revert HealthyAccount();
+    //     // Amount user has to borrow more than in order to be liquidated
+    //     uint256 liquidationThreshold = (supplied[mintPoolAddress][_account] *
+    //         tokenPrice * 100) / collateralRatioIdeal;
+    //     uint256 userBorrowed = borrowed[mintPoolAddress][msg.sender].principal;
+    //     if (userBorrowed <= liquidationThreshold) revert HealthyAccount();
 
-        uint256 globalBorrowRatio = (totalBorrowed[mintPoolAddress] * 1e20) /
-            _getMaxBorrow(totalSupplied[mintPoolAddress], tokenPrice);
-        uint256 _closeFactor = globalBorrowRatio < globalBorrowRatioLiuquidation
-            ? closeFactor : closeFactorNormal;
-        uint256 _liquidationDiscount = globalBorrowRatio < globalBorrowRatioLiuquidation
-            ? liquidationDiscount : liquidationDiscountNormal;
+    //     uint256 globalBorrowRatio = (totalBorrowed[mintPoolAddress] * 1e20) /
+    //         _getMaxBorrow(totalSupplied[mintPoolAddress], tokenPrice);
+    //     uint256 _closeFactor = globalBorrowRatio < globalBorrowRatioLiquidation
+    //         ? closeFactor : closeFactorNormal;
+    //     uint256 _liquidationDiscount = globalBorrowRatio < globalBorrowRatioLiquidation
+    //         ? liquidationDiscount : liquidationDiscountNormal;
 
-        uint256 maxRepay = (userBorrowed * _closeFactor) / 1e20;
-        if (_repayAmount > maxRepay) revert ExceedAmountAllowed(_repayAmount, maxRepay);
+    //     uint256 maxRepay = (userBorrowed * _closeFactor) / 1e20;
+    //     if (_repayAmount > maxRepay) revert ExceedAmountAllowed(_repayAmount, maxRepay);
 
-        // Both liquidator's & liquidatee's supplied amount will be changed
-        rewardManager.lsdUpdateReward(_account, isRebasePool);
-        rewardManager.lsdUpdateReward(msg.sender, isRebasePool);
+    //     // Both liquidator's & liquidatee's supplied amount will be changed
+    //     rewardManager.lsdUpdateReward(_account, isRebasePool);
+    //     rewardManager.lsdUpdateReward(msg.sender, isRebasePool);
 
-        repayUSD(_poolIndex, _account, _repayAmount);
-        uint256 seizeAmount = (_repayAmount * _liquidationDiscount * 1e18) / 1e20 / tokenPrice;
-        supplied[mintPoolAddress][_account] -= seizeAmount;
-        supplied[mintPoolAddress][msg.sender] += seizeAmount;
+    //     repayUSD(_poolIndex, _account, _repayAmount);
+    //     uint256 seizeAmount = (_repayAmount * _liquidationDiscount * 1e18) / 1e20 / tokenPrice;
+    //     supplied[mintPoolAddress][_account] -= seizeAmount;
+    //     supplied[mintPoolAddress][msg.sender] += seizeAmount;
 
-        emit Liquidated(mintPoolAddress, _account, msg.sender, seizeAmount);
+    //     emit Liquidated(mintPoolAddress, _account, msg.sender, seizeAmount);
 
-        mintUSD(mintPoolAddress);
-    }
+    //     mintUSD(mintPoolAddress);
+    // }
 
     /**
      * @dev Assumes that dlp ratio is always > 3%
@@ -833,11 +872,12 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     function claimProtocolRevenue() external {
         require(msg.sender == address(rewardManager));
 
-        IRewardPool(lybraProtocolRevenue).getReward(address(this));
+        IRewardPool(lybraProtocolRevenue).getReward();
 
         // TODO: use balanceOf.address(this) or lybraProtocolRevenue.earned() ???
         // Still not decided
-        IERC20(peUSD).transfer(stakingPool, IERC20(peUSD).balanceOf(address(this)));
+        IERC20 peUSD = IERC20(lybraConfigurator.peUSD());
+        peUSD.transfer(stakingPool, peUSD.balanceOf(address(this)));
     }
 
     function boostReward(uint256 _settingId, uint256 _amount) external onlyOwner {
@@ -1011,6 +1051,34 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
     function monitorBurn(address _mintPoolAddress, uint256 _amount) external onlyMonitor {
         _burnUSD(_mintPoolAddress, _amount);
+    }
+
+    function softLiquidation(uint256 _poolIndex, address _account, uint256 _repayAmount) external onlyMonitor {
+        IMintPool mintPool = mintPools[_poolIndex];
+        address mintPoolAddress = address(mintPool);
+        bool isRebasePool = isRebase[mintPoolAddress];
+        uint256 tokenPrice = mintPool.getAssetPrice();
+
+        // Amount user has to borrow more than in order to be liquidated
+        uint256 liquidationThreshold = (supplied[mintPoolAddress][_account] *
+            tokenPrice * 100) / collateralRatioLiquidate;
+        uint256 userBorrowed = borrowed[mintPoolAddress][msg.sender].principal;
+        if (userBorrowed <= liquidationThreshold) revert HealthyAccount();
+
+        // Both liquidator's & liquidatee's supplied amount will be changed
+        rewardManager.lsdUpdateReward(_account, isRebasePool);
+        rewardManager.lsdUpdateReward(msg.sender, isRebasePool);
+
+        uint256 maxRepay = (userBorrowed * closeFactorNormal) / 1e20;
+        if (_repayAmount > maxRepay) revert ExceedAmountAllowed(_repayAmount, maxRepay);
+        repayUSD(_poolIndex, _account, _repayAmount);
+        uint256 seizeAmount = (_repayAmount * liquidationDiscountNormal * 1e18) / 1e20 / tokenPrice;
+        supplied[mintPoolAddress][_account] -= seizeAmount;
+        supplied[mintPoolAddress][msg.sender] += seizeAmount;
+
+        emit Liquidated(mintPoolAddress, _account, msg.sender, seizeAmount);
+
+        mintUSD(mintPoolAddress);
     }
 
     /**
