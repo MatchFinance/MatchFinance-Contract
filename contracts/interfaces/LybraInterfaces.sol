@@ -39,6 +39,8 @@ interface IMintPool {
     function getPoolTotalCirculation() external view returns (uint256);
 
     function getBorrowedOf(address user) external view returns (uint256);
+
+    function getAsset2EtherExchangeRate() external view returns (uint256);
 }
 
 interface IConfigurator {
@@ -51,6 +53,8 @@ interface IConfigurator {
     function refreshMintReward(address _account) external;
 
     function eUSDMiningIncentives() external view returns (address);
+
+    function getProtocolRewardsPool() external view returns (address);
 }
 
 // eUSD mining incentive, dlp stake reward pool
@@ -65,7 +69,7 @@ interface IRewardPool {
 
     // !! @modify Eric Lee 20231031
     function earned(address) external view returns (uint256);
-    function getReward(address) external;
+    function getReward() external;
 }
 
 interface IEUSD {

@@ -17,6 +17,12 @@ interface IMatchPool {
 
     function supplied(address _mintPool, address _user) external view returns (uint256);
 
+    // In terms of stETH
+    function totalSuppliedReward(address _mintPool) external view returns (uint256);
+
+    // In terms of stETH
+    function suppliedReward(address _mintPool, address _user) external view returns (uint256);
+
     function totalMinted(address _mintPool) external view returns (uint256);
 
     function claimRebase() external returns (uint256);
