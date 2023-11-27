@@ -450,6 +450,9 @@ contract RewardManager is Initializable, OwnableUpgradeable {
                 emit DLPRewardClaimed(msg.sender, rewardAmount);
             }
 
+            // !! @modify Code added by Eric 20231030
+            // Only update when users claim their rewards
+            updateStakingPoolReward();
             return;
         }
 
@@ -477,12 +480,11 @@ contract RewardManager is Initializable, OwnableUpgradeable {
                 emit eUSDRewardClaimed(msg.sender, rewardAmount);
             }
 
+            // !! @modify Code added by Eric 20231030
+            // Only update when users claim their rewards
+            updateStakingPoolReward();
             return;
         }
-
-        // !! @modify Code added by Eric 20231030
-        // Only update when users claim their rewards
-        updateStakingPoolReward();
     }
 
     function updateStakingPoolReward() public {
@@ -501,21 +503,16 @@ contract RewardManager is Initializable, OwnableUpgradeable {
         // pendingBoostReward has been updated in the previous "getReward" funciton inside "getAllRewards"
         if (pendingBoostReward > 0) {
             stakingPool.updateReward(pendingBoostReward, protocolRevenue);
+
+            mesLBR.mint(address(stakingPool), pendingBoostReward);
+            // delete this buffer
+            pendingBoostReward = 0;
         }
-
-        mesLBR.mint(address(stakingPool), pendingBoostReward);
-
-        // delete this buffer
-        pendingBoostReward = 0;
     }
 
     function getAllRewards(bool _stakeNow) external {
         getReward(dlpRewardPool, _stakeNow);
         getReward(miningIncentive, _stakeNow);
-
-        // !! @modify Code added by Eric 20231030
-        // Only update when users claim their rewards
-        updateStakingPoolReward();
     }
 
     // ---------------------------------------------------------------------------------------- //
