@@ -110,25 +110,32 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
     IesLBRBoost public esLBRBoost;
 
-    // Used for calculations in adjustEUSDAmount() only
-    struct Calc {
-        // Amount of eUSD to mint to achieve { dlpRatioIdeal }
-        uint256 mintAmountGivenDlp;
-        // Amount of eUSD to mint to achieve { collateralRatioIdeal }
-        uint256 mintAmountGivenCollateral;
-        // Amount of eUSD to burn to achieve { dlpRatioIdeal }
-        uint256 burnAmountGivenDlp;
-        // Amount of eUSD to burn to achieve { collateralRatioIdeal }
-        uint256 burnAmountGivenCollateral;
-        // Amount of stETH to deposit to achieve { collateralRatioIdeal }
-        uint256 amountToDeposit;
-        // Reference: Lybra EUSDMiningIncentives.sol { stakeOf(address user) }, line 173
-        // Vault weight of stETH mint pool, scaled by 1e20
-        uint256 vaultWeight;
-        // Value of staked LP tokens, scaled by 1e18
-        uint256 currentLpValue;
-        uint256 dlpRatioCurrent;
-        uint256 collateralRatioCurrent;
+    // // Used for calculations in adjustEUSDAmount() only
+    // struct Calc {
+    //     // Amount of eUSD to mint to achieve { dlpRatioIdeal }
+    //     uint256 mintAmountGivenDlp;
+    //     // Amount of eUSD to mint to achieve { collateralRatioIdeal }
+    //     uint256 mintAmountGivenCollateral;
+    //     // Amount of eUSD to burn to achieve { dlpRatioIdeal }
+    //     uint256 burnAmountGivenDlp;
+    //     // Amount of eUSD to burn to achieve { collateralRatioIdeal }
+    //     uint256 burnAmountGivenCollateral;
+    //     // Amount of stETH to deposit to achieve { collateralRatioIdeal }
+    //     uint256 amountToDeposit;
+    //     // Reference: Lybra EUSDMiningIncentives.sol { stakeOf(address user) }, line 173
+    //     // Vault weight of stETH mint pool, scaled by 1e20
+    //     uint256 vaultWeight;
+    //     // Value of staked LP tokens, scaled by 1e18
+    //     uint256 currentLpValue;
+    //     uint256 dlpRatioCurrent;
+    //     uint256 collateralRatioCurrent;
+    // }
+
+    struct PoolInfo {
+        IMintPool mintPool;
+        address mintPoolAddress;
+        bool isRebasePool;
+        uint256 tokenPrice;
     }
 
     // !! @modify Code added by Eric 20231030
@@ -138,6 +145,8 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     // Record supply amounts in terms of stETH for reward calculation
     mapping(address => uint256) public totalSuppliedReward;
     mapping(address => mapping(address => uint256)) public suppliedReward;
+
+    uint256 public rebaseRatePerSec; // 6% / 365 days, scaled by 1e18
 
     // ---------------------------------------------------------------------------------------- //
     // *************************************** Events ***************************************** //
@@ -227,11 +236,16 @@ contract MatchPool is Initializable, OwnableUpgradeable {
      */
     function getAccInterest(
         address _mintPool,
-        address _account
+        address _account,
+        bool isRebasePool
     ) public view returns (uint256) {
         BorrowInfo memory info = borrowed[_mintPool][_account];
         uint256 timeDelta = block.timestamp - info.interestTimestamp;
-        return (info.interestAmount * borrowRatePerSec * timeDelta) / 1e18;
+        uint256 interest = isRebasePool 
+            ? info.interestAmount * borrowRatePerSec * timeDelta 
+                + info.principal * rebaseRatePerSec * timeDelta
+            : info.interestAmount * borrowRatePerSec * timeDelta;
+        return interest / 1e18;
     }
 
     // ---------------------------------------------------------------------------------------- //
@@ -288,6 +302,10 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         collateralRatioUpper = _upper;
         collateralRatioIdeal = _ideal;
         emit CollateralRatioChanged(_liquidate, _upper, _ideal);
+    }
+
+    function setRebaseRate(uint256 _rebaseRatePerYear) public onlyOwner {
+        rebaseRatePerSec = _rebaseRatePerYear / 365 days;
     }
 
     function setBorrowRate(uint256 _borrowRatePerYear) public onlyOwner {
@@ -488,7 +506,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         supplied[mintPoolAddress][msg.sender] += amount;
         totalSupplied[mintPoolAddress] += amount;
 
-        if (poolIndex > 0) {
+        if (_poolIndex > 0) {
             // Store supply amount in terms of stETH
             uint256 newSuppliedReward = supplied[mintPoolAddress][msg.sender] * 
                 mintPool.getAsset2EtherExchangeRate() / 1e18;
@@ -519,7 +537,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         totalSupplied[mintPoolAddress] += _amount;
 
         // Store supply amount in terms of stETH
-        if (poolIndex > 0) {
+        if (_poolIndex > 0) {
             uint256 newSuppliedReward = supplied[mintPoolAddress][msg.sender] * 
                 mintPool.getAsset2EtherExchangeRate() / 1e18;
             totalSuppliedReward[mintPoolAddress] += (
@@ -534,41 +552,45 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     }
 
     function withdrawLSD(uint256 _poolIndex, uint256 _amount) external {
-        IMintPool mintPool = mintPools[_poolIndex];
-        address mintPoolAddress = address(mintPool);
-        bool isRebasePool = isRebase[mintPoolAddress];
-        uint256 tokenPrice = mintPool.getAssetPrice();
+        PoolInfo memory poolInfo;
+        poolInfo.mintPool = mintPools[_poolIndex];
+        poolInfo.mintPoolAddress = address(poolInfo.mintPool);
+        poolInfo.isRebasePool = isRebase[poolInfo.mintPoolAddress];
+        poolInfo.tokenPrice = poolInfo.mintPool.getAssetPrice();
 
-        uint256 borrowedEUSD = borrowed[mintPoolAddress][msg.sender].principal;
-        uint256 withdrawable = borrowedEUSD > 0
-            ? supplied[mintPoolAddress][msg.sender] -
-                (((borrowedEUSD * collateralRatioIdeal) / maxBorrowRatio) * 1e18) /
-                tokenPrice
-            : supplied[mintPoolAddress][msg.sender];
+        uint256 borrowedWithInterest = borrowed[poolInfo.mintPoolAddress][msg.sender].principal
+            + getAccInterest(poolInfo.mintPoolAddress, msg.sender, poolInfo.isRebasePool);
+        // Amount of LSD required to back borrow
+        uint256 requiredLSD = (borrowedWithInterest * collateralRatioIdeal / maxBorrowRatio) 
+            * 1e18 / poolInfo.tokenPrice;
+        uint256 withdrawable = borrowedWithInterest > 0
+            ? requiredLSD > supplied[poolInfo.mintPoolAddress][msg.sender]
+                ? 0 : supplied[poolInfo.mintPoolAddress][msg.sender] - requiredLSD
+            : supplied[poolInfo.mintPoolAddress][msg.sender];
 
         if (_amount > withdrawable) revert ExceedAmountAllowed(_amount, withdrawable);
-        uint256 _totalDeposited = totalDeposited[mintPoolAddress];
-        uint256 _totalMinted = totalMinted[mintPoolAddress];
+        uint256 _totalDeposited = totalDeposited[poolInfo.mintPoolAddress];
+        uint256 _totalMinted = totalMinted[poolInfo.mintPoolAddress];
 
-        rewardManager.lsdUpdateReward(msg.sender, isRebasePool);
+        rewardManager.lsdUpdateReward(msg.sender, poolInfo.isRebasePool);
 
-        uint256 idleAmount = totalSupplied[mintPoolAddress] - _totalDeposited;
-        if (isRebasePool) {
+        uint256 idleAmount = totalSupplied[poolInfo.mintPoolAddress] - _totalDeposited;
+        if (poolInfo.isRebasePool) {
             if (idleAmount > 0.01 ether) idleAmount -= 0.01 ether;
             else idleAmount = 0;
         }
 
-        supplied[mintPoolAddress][msg.sender] -= _amount;
-        totalSupplied[mintPoolAddress] -= _amount;
+        supplied[poolInfo.mintPoolAddress][msg.sender] -= _amount;
+        totalSupplied[poolInfo.mintPoolAddress] -= _amount;
 
         // Store supply amount in terms of stETH
-        if (poolIndex > 0) {
-            uint256 newSuppliedReward = supplied[mintPoolAddress][msg.sender] * 
-                mintPool.getAsset2EtherExchangeRate() / 1e18;
-            totalSuppliedReward[mintPoolAddress] -= (
-                suppliedReward[mintPoolAddress][msg.sender] - newSuppliedReward
+        if (_poolIndex > 0) {
+            uint256 newSuppliedReward = supplied[poolInfo.mintPoolAddress][msg.sender] * 
+                poolInfo.mintPool.getAsset2EtherExchangeRate() / 1e18;
+            totalSuppliedReward[poolInfo.mintPoolAddress] -= (
+                suppliedReward[poolInfo.mintPoolAddress][msg.sender] - newSuppliedReward
             );
-            suppliedReward[mintPoolAddress][msg.sender] = newSuppliedReward;
+            suppliedReward[poolInfo.mintPoolAddress][msg.sender] = newSuppliedReward;
         }
 
         // Withdraw additional LSD from Lybra vault if contract does not have enough idle LSD
@@ -578,7 +600,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
             uint256 withdrawableFromLybra = _getDepositAmountDelta(
                 _totalDeposited,
                 _totalMinted,
-                tokenPrice
+                poolInfo.tokenPrice
             );
 
             // Burn eUSD to withdraw LSD required
@@ -586,36 +608,36 @@ contract MatchPool is Initializable, OwnableUpgradeable {
                 uint256 amountToBurn = _getMintAmountDeltaC(
                     _totalDeposited - withdrawFromLybra,
                     _totalMinted,
-                    tokenPrice
+                    poolInfo.tokenPrice
                 );
-                _burnUSD(mintPoolAddress, amountToBurn);
+                _burnUSD(poolInfo.mintPoolAddress, amountToBurn);
             }
 
             // Get withdrawal amount after punishment (if any) from Lybra, accepted by user, only for stETH
-            uint256 actualAmount = isRebasePool
-                ? mintPool.checkWithdrawal(address(this), withdrawFromLybra)
+            uint256 actualAmount = poolInfo.isRebasePool
+                ? poolInfo.mintPool.checkWithdrawal(address(this), withdrawFromLybra)
                 : withdrawFromLybra;
-            _withdrawFromLybra(mintPoolAddress, withdrawFromLybra);
+            _withdrawFromLybra(poolInfo.mintPoolAddress, withdrawFromLybra);
 
-            IERC20(mintPool.getAsset()).safeTransfer(
+            IERC20(poolInfo.mintPool.getAsset()).safeTransfer(
                 msg.sender,
                 idleAmount + actualAmount
             );
 
             emit LSDWithdrew(
-                mintPoolAddress,
+                poolInfo.mintPoolAddress,
                 msg.sender,
                 _amount,
                 withdrawFromLybra - actualAmount
             );
         } else {
             // If contract has enough idle LSD, just transfer out
-            IERC20(mintPool.getAsset()).safeTransfer(msg.sender, _amount);
+            IERC20(poolInfo.mintPool.getAsset()).safeTransfer(msg.sender, _amount);
 
-            emit LSDWithdrew(mintPoolAddress, msg.sender, _amount, 0);
+            emit LSDWithdrew(poolInfo.mintPoolAddress, msg.sender, _amount, 0);
         }
 
-        mintUSD(mintPoolAddress);
+        mintUSD(poolInfo.mintPoolAddress);
     }
 
     // Take out/borrow eUSD/peUSD from Match Pool
@@ -640,22 +662,31 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         // No need to update user reward info as there are no changes in supply amount
         rewardManager.lsdUpdateReward(address(0), isRebasePool);
 
-        borrowed[mintPoolAddress][msg.sender].principal = newBorrowAmount;
-        totalBorrowed[mintPoolAddress] += _amount;
-
-        // Greater than global borrow ratio threshold
         uint256 globalBorrowRatio = (totalBorrowed[mintPoolAddress] * 1e20) /
             _getMaxBorrow(totalSupplied[mintPoolAddress], tokenPrice);
+
+        // Borrowing eUSD has to be charged interest at the rate of rebase apr
+        if (isRebasePool) {
+            BorrowInfo storage info = borrowed[mintPoolAddress][msg.sender];
+
+            if (info.principal != 0)
+                info.accInterest += getAccInterest(mintPoolAddress, msg.sender, isRebasePool);
+            if (globalBorrowRatio >= globalBorrowRatioThreshold) info.interestAmount += _amount;
+            info.interestTimestamp = block.timestamp;
+        } 
         // Borrow amount has to be charged interest if global borrow ratio threshold is reached
-        if (globalBorrowRatio >= globalBorrowRatioThreshold) {
+        else if (globalBorrowRatio >= globalBorrowRatioThreshold) {
             BorrowInfo storage info = borrowed[mintPoolAddress][msg.sender];
 
             // Already borrowed before with interest
             if (info.interestAmount != 0)
-                info.accInterest += getAccInterest(mintPoolAddress, msg.sender);
+                info.accInterest += getAccInterest(mintPoolAddress, msg.sender, isRebasePool);
             info.interestAmount += _amount;
             info.interestTimestamp = block.timestamp;
         }
+
+        borrowed[mintPoolAddress][msg.sender].principal = newBorrowAmount;
+        totalBorrowed[mintPoolAddress] += _amount;
 
         address asset = isRebasePool
             ? lybraConfigurator.getEUSDAddress() : lybraConfigurator.peUSD();
@@ -673,7 +704,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
         uint256 oldBorrowAmount = borrowed[mintPoolAddress][_account].principal;
         uint256 newAccInterest = borrowed[mintPoolAddress][_account].accInterest +
-            getAccInterest(mintPoolAddress, _account);
+            getAccInterest(mintPoolAddress, _account, isRebasePool);
         IERC20 asset = isRebasePool
             ? IERC20(lybraConfigurator.getEUSDAddress())
             : IERC20(lybraConfigurator.peUSD());
