@@ -139,43 +139,43 @@ contract RewardManager is Initializable, OwnableUpgradeable {
     /**
      * @notice Cannot get eUSD rebase reward if borrowed eUSD from any mint pool
      */
-    function hasBorrwedEUSD(address _account) public view returns (bool) {
-        address[] memory mintPools = matchPool.getMintPools();
+    // function hasBorrwedEUSD(address _account) public view returns (bool) {
+    //     address[] memory mintPools = matchPool.getMintPools();
 
-        for (uint256 i; i < mintPools.length; ) {
-            if (matchPool.isRebase(mintPools[i])) {
-                (uint256 borrowedAmount, , , ) = matchPool.borrowed(
-                    mintPools[i],
-                    _account
-                );
-                if (borrowedAmount > 0) return true;
-            }
+    //     for (uint256 i; i < mintPools.length; ) {
+    //         if (matchPool.isRebase(mintPools[i])) {
+    //             (uint256 borrowedAmount, , , ) = matchPool.borrowed(
+    //                 mintPools[i],
+    //                 _account
+    //             );
+    //             if (borrowedAmount > 0) return true;
+    //         }
 
-            unchecked {
-                ++i;
-            }
-        }
+    //         unchecked {
+    //             ++i;
+    //         }
+    //     }
 
-        return false;
-    }
+    //     return false;
+    // }
 
     /**
      * @notice Cannot claim rewards if has unpaid interest
      */
-    function hasUnpaidInterest(address _account) public view returns (bool) {
-        address[] memory mintPools = matchPool.getMintPools();
+    // function hasUnpaidInterest(address _account) public view returns (bool) {
+    //     address[] memory mintPools = matchPool.getMintPools();
 
-        for (uint256 i; i < mintPools.length; ) {
-            (, , uint256 unpaidInterest, ) = matchPool.borrowed(mintPools[i], _account);
-            if (unpaidInterest > 0) return true;
+    //     for (uint256 i; i < mintPools.length; ) {
+    //         (, , uint256 unpaidInterest, ) = matchPool.borrowed(mintPools[i], _account);
+    //         if (unpaidInterest > 0) return true;
 
-            unchecked {
-                ++i;
-            }
-        }
+    //         unchecked {
+    //             ++i;
+    //         }
+    //     }
 
-        return false;
-    }
+    //     return false;
+    // }
 
     /**
      * @notice Returns amount of rebase LSD that contributed to earning eUSD rebase
@@ -244,7 +244,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
                 if (matchPool.totalMinted(mintPoolAddress) > 0) {
                     // stETH pool
                     if (i == 0) total += matchPool.totalSupplied(mintPoolAddress);
-                    else total += matchPool.totalSuppliedReward(mintPoolAddress)
+                    else total += matchPool.totalSuppliedReward(mintPoolAddress);
                 }
 
                 unchecked {
@@ -415,12 +415,12 @@ contract RewardManager is Initializable, OwnableUpgradeable {
         ];
 
         if (_isRebase) {
-            if (!hasBorrwedEUSD(_account))
+            // if (!hasBorrwedEUSD(_account))
                 userRewards[_eUSD][_account] = _earned(_account, _eUSD, 0);
                 // Users who borrowed eUSD will not share rebase reward
-            else
-                userRewards[_eUSD][treasury] += (_earned(_account, _eUSD, 0) -
-                    userRewards[_eUSD][_account]);
+            // else
+            //     userRewards[_eUSD][treasury] += (_earned(_account, _eUSD, 0) -
+            //         userRewards[_eUSD][_account]);
             userRewardsPerTokenPaid[_eUSD][_account] = rewardPerTokenStored[_eUSD];
         }
 
@@ -433,7 +433,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 
         // Cannot claim rewards if has not fully repaid eUSD/peUSD interest
         // due to borrowing when above { globalBorrowRatioThreshold }
-        if (hasUnpaidInterest(msg.sender)) revert UnpaidInterest();
+        // if (hasUnpaidInterest(msg.sender)) revert UnpaidInterest();
 
         address _dlpRewardPool = dlpRewardPool;
         address _miningIncentive = miningIncentive;
