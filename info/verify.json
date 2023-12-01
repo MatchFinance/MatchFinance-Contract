@@ -1,7 +1,7 @@
 {
 	"mainnet": {
 		"MatchPool": {
-			"address": "0xad3e690a14c7414d88429a1ea6934cc944c12e65",
+			"address": "0x55025Dc32cEA61d2013d25A2da2316F3c0d94a92",
 			"args": []
 		},
 		"RewardManager": {
