@@ -916,19 +916,18 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     /**
      * @param _depositedAmount Amount of LSD deposited to Lybra vault
      * @param _mintedAmount Amount of eUSD/peUSD minted
-     * @return Amount of LSD to deposit to/withdraw from Lybra vault in order to achieve { collateralRatioIdeal }
-     *  1st condition -> deposit amount, 2nd condition -> withdraw amount
+     * @return Amount of LSD that can be withdrawn from Lybra vault and collateral ratio remains 
+     *  above { collateralRatioLower }
      */
     function _getDepositAmountDelta(
         uint256 _depositedAmount,
         uint256 _mintedAmount,
         uint256 _price
     ) private view returns (uint256) {
-        uint256 newDepositedAmount = (collateralRatioIdeal * _mintedAmount) / _price / 100;
-        return
-            newDepositedAmount > _depositedAmount
-                ? newDepositedAmount - _depositedAmount
-                : _depositedAmount - newDepositedAmount;
+        uint256 newDepositedAmount = (collateralRatioLower * _mintedAmount) / _price / 100;
+        return newDepositedAmount > _depositedAmount 
+            ? 0 
+            : _depositedAmount - newDepositedAmount;
     }
 
     /**
@@ -992,8 +991,8 @@ contract MatchPool is Initializable, OwnableUpgradeable {
             totalMinted[_mintPoolAddress],
             mintPool.getAssetPrice()
         );
-        // Withdraw only if collateral ratio remains above { collateralRatioIdeal }
-        if (collateralRatioAfter < collateralRatioIdeal) revert InsufficientCollateral();
+        // Withdraw only until collateral ratio reaches { collateralRatioLower }
+        if (collateralRatioAfter < collateralRatioLower) revert InsufficientCollateral();
 
         mintPool.withdraw(address(this), _amount);
         totalDeposited[_mintPoolAddress] -= _amount;
@@ -1026,6 +1025,8 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     // ---------------------------------------------------------------------------------------- //
     // *********************************** Monitor Functions ********************************** //
     // ---------------------------------------------------------------------------------------- //
+
+    // @notice Monitor functions are only called by Match Finance's auto adjustment system
 
     function monitorDeposit(
         address _mintPoolAddress,
