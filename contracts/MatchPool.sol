@@ -6,6 +6,7 @@ import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/I
 import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 import "./interfaces/LybraInterfaces.sol";
@@ -334,8 +335,6 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         staked[msg.sender] += _amount;
 
         emit LpStaked(msg.sender, _amount);
-
-        mintEUSD();
     }
 
     // Withdraw LBR-ETH LP token
@@ -354,8 +353,6 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         ethlbrLpToken.safeTransfer(msg.sender, _amount);
 
         emit LpWithdrew(msg.sender, _amount);
-
-        mintEUSD();
     }
 
     function supplyETH() external payable {
@@ -598,148 +595,148 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     /**
      * @notice Implementation of dynamic eUSD minting mechanism and collateral ratio control
      */
-    function adjustEUSDAmount() public {
-        address mintPoolAddress = address(getMintPool());
+    // function adjustEUSDAmount() public {
+    //     address mintPoolAddress = address(getMintPool());
 
-        Calc memory calc;
-        // Amount of ETH/stETH supplied by users to this contract
-        uint256 _totalSupplied = totalSupplied[mintPoolAddress];
-        // Original amount of total deposits
-        uint256 _totalDeposited = totalDeposited[mintPoolAddress];
-        // Original amount of total eUSD minted
-        uint256 _totalMinted = totalMinted[mintPoolAddress];
-        // Value of staked LP tokens, scaled by 1e18
-        calc.currentLpValue = getLpValue(totalStaked);
-        calc.vaultWeight = lybraConfigurator.getVaultWeight(address(getMintPool()));
+    //     Calc memory calc;
+    //     // Amount of ETH/stETH supplied by users to this contract
+    //     uint256 _totalSupplied = totalSupplied[mintPoolAddress];
+    //     // Original amount of total deposits
+    //     uint256 _totalDeposited = totalDeposited[mintPoolAddress];
+    //     // Original amount of total eUSD minted
+    //     uint256 _totalMinted = totalMinted[mintPoolAddress];
+    //     // Value of staked LP tokens, scaled by 1e18
+    //     calc.currentLpValue = getLpValue(totalStaked);
+    //     calc.vaultWeight = lybraConfigurator.getVaultWeight(address(getMintPool()));
 
-        // First mint
-        if (_totalDeposited == 0 && _totalMinted == 0) {
-            if (_totalSupplied < 1 ether) return;
+    //     // First mint
+    //     if (_totalDeposited == 0 && _totalMinted == 0) {
+    //         if (_totalSupplied < 1 ether) return;
 
-            _mintMin(calc, _totalMinted, _totalDeposited, _totalSupplied);
-            return;
-        }
+    //         _mintMin(calc, _totalMinted, _totalDeposited, _totalSupplied);
+    //         return;
+    //     }
 
-        calc.dlpRatioCurrent = _getDlpRatio(calc.currentLpValue, _totalMinted, calc.vaultWeight);
-        // Burn eUSD all at once instead of multiple separated txs
-        uint256 amountToBurnTotal;
+    //     calc.dlpRatioCurrent = _getDlpRatio(calc.currentLpValue, _totalMinted, calc.vaultWeight);
+    //     // Burn eUSD all at once instead of multiple separated txs
+    //     uint256 amountToBurnTotal;
 
-        // When dlp ratio falls short of ideal, eUSD will be burnt no matter what the collateral ratio is
-        if (calc.dlpRatioCurrent <= dlpRatioLower) {
-            calc.burnAmountGivenDlp = _getMintAmountDeltaD(calc.currentLpValue, _totalMinted, calc.vaultWeight);
-            amountToBurnTotal += calc.burnAmountGivenDlp;
-            _totalMinted -= calc.burnAmountGivenDlp;
+    //     // When dlp ratio falls short of ideal, eUSD will be burnt no matter what the collateral ratio is
+    //     if (calc.dlpRatioCurrent <= dlpRatioLower) {
+    //         calc.burnAmountGivenDlp = _getMintAmountDeltaD(calc.currentLpValue, _totalMinted, calc.vaultWeight);
+    //         amountToBurnTotal += calc.burnAmountGivenDlp;
+    //         _totalMinted -= calc.burnAmountGivenDlp;
 
-            // Update dlp ratio, from less than { dlpRatioLower }, to { dlpRatioIdeal }
-            calc.dlpRatioCurrent = dlpRatioIdeal;
-        }
+    //         // Update dlp ratio, from less than { dlpRatioLower }, to { dlpRatioIdeal }
+    //         calc.dlpRatioCurrent = dlpRatioIdeal;
+    //     }
 
-        // Amount stETH currently idle in Match Pool
-        uint256 totalIdle = _totalSupplied - _totalDeposited;
-        calc.collateralRatioCurrent = _getCollateralRatio(_totalDeposited, _totalMinted);
+    //     // Amount stETH currently idle in Match Pool
+    //     uint256 totalIdle = _totalSupplied - _totalDeposited;
+    //     calc.collateralRatioCurrent = _getCollateralRatio(_totalDeposited, _totalMinted);
 
-        // When collateral ratio falls short of lower bound
-        // Option 1: Deposit to increasae collateral ratio, doesn't affect dlp ratio
-        // Option 2: Burn eUSD to increase collateral ratio
-        if (calc.collateralRatioCurrent <= collateralRatioLower) {
-            // Must be Option 2 due to Lybra deposit min. requirement
-            if (totalIdle < 1 ether) {
-                calc.burnAmountGivenCollateral = _getMintAmountDeltaC(_totalDeposited, _totalMinted);
-                amountToBurnTotal += calc.burnAmountGivenCollateral;
-                _burnEUSD(amountToBurnTotal);
-                // Result: dlp ratio > 2.75%, collateral ratio = 200%
-                return;
-            } 
+    //     // When collateral ratio falls short of lower bound
+    //     // Option 1: Deposit to increasae collateral ratio, doesn't affect dlp ratio
+    //     // Option 2: Burn eUSD to increase collateral ratio
+    //     if (calc.collateralRatioCurrent <= collateralRatioLower) {
+    //         // Must be Option 2 due to Lybra deposit min. requirement
+    //         if (totalIdle < 1 ether) {
+    //             calc.burnAmountGivenCollateral = _getMintAmountDeltaC(_totalDeposited, _totalMinted);
+    //             amountToBurnTotal += calc.burnAmountGivenCollateral;
+    //             _burnEUSD(amountToBurnTotal);
+    //             // Result: dlp ratio > 2.75%, collateral ratio = 200%
+    //             return;
+    //         } 
 
-            // Option 1
-            calc.amountToDeposit = _getDepositAmountDelta(_totalDeposited, _totalMinted);
+    //         // Option 1
+    //         calc.amountToDeposit = _getDepositAmountDelta(_totalDeposited, _totalMinted);
 
-            // 1 ether <= totalIdle < amountToDeposit
-            // Deposit all idle stETH and burn some eUSD to achieve { collateralRatioIdeal }
-            if (calc.amountToDeposit > totalIdle) {
-                _depositToLybra(totalIdle, 0);
-                _totalDeposited += totalIdle;
+    //         // 1 ether <= totalIdle < amountToDeposit
+    //         // Deposit all idle stETH and burn some eUSD to achieve { collateralRatioIdeal }
+    //         if (calc.amountToDeposit > totalIdle) {
+    //             _depositToLybra(totalIdle, 0);
+    //             _totalDeposited += totalIdle;
 
-                calc.burnAmountGivenCollateral = _getMintAmountDeltaC(_totalDeposited, _totalMinted);
-                amountToBurnTotal += calc.burnAmountGivenCollateral;
-                _burnEUSD(amountToBurnTotal);
-                // Result: dlp ratio > 2.75%, collateral ratio = 200%
-                return;
-            }
+    //             calc.burnAmountGivenCollateral = _getMintAmountDeltaC(_totalDeposited, _totalMinted);
+    //             amountToBurnTotal += calc.burnAmountGivenCollateral;
+    //             _burnEUSD(amountToBurnTotal);
+    //             // Result: dlp ratio > 2.75%, collateral ratio = 200%
+    //             return;
+    //         }
 
-            // If dlp ratio required burning (line 584)
-            if (amountToBurnTotal > 0) _burnEUSD(amountToBurnTotal);
+    //         // If dlp ratio required burning (line 584)
+    //         if (amountToBurnTotal > 0) _burnEUSD(amountToBurnTotal);
 
-            // 1 ether <= totalIdle == amountToDeposit
-            if (calc.amountToDeposit == totalIdle) {
-                _depositToLybra(calc.amountToDeposit, 0);
-                // Result: dlp ratio > 2.75%, collateral ratio = 200%
-                return;
-            }
+    //         // 1 ether <= totalIdle == amountToDeposit
+    //         if (calc.amountToDeposit == totalIdle) {
+    //             _depositToLybra(calc.amountToDeposit, 0);
+    //             // Result: dlp ratio > 2.75%, collateral ratio = 200%
+    //             return;
+    //         }
 
-            // amountToDeposit < 1 ether <= totalIdle, MUST over-collateralize
-            // 1 ether < amountToDeposit < totalIdle, MIGHT over-collateralize
+    //         // amountToDeposit < 1 ether <= totalIdle, MUST over-collateralize
+    //         // 1 ether < amountToDeposit < totalIdle, MIGHT over-collateralize
 
-            // Cannot mint more even if there is over-collateralization, disallowed by dlp ratio
-            if (calc.dlpRatioCurrent < dlpRatioUpper) {
-                _depositToLybra(_max(calc.amountToDeposit, 1 ether), 0);
-                // Result: 2.75% < dlp ratio < 3.25%, collateral ratio >= 200%
-                return;
-            }
+    //         // Cannot mint more even if there is over-collateralization, disallowed by dlp ratio
+    //         if (calc.dlpRatioCurrent < dlpRatioUpper) {
+    //             _depositToLybra(_max(calc.amountToDeposit, 1 ether), 0);
+    //             // Result: 2.75% < dlp ratio < 3.25%, collateral ratio >= 200%
+    //             return;
+    //         }
 
-            // If (dlpRatioCurrent >= dlpRatioUpper) -> mint more to maximize reward
-            // Collateral ratio must be > 200% after depositing all idle stETH, according to prev. checks
-            _mintMin(calc, _totalMinted, _totalDeposited, _totalDeposited + totalIdle);
-            return;
-        }
+    //         // If (dlpRatioCurrent >= dlpRatioUpper) -> mint more to maximize reward
+    //         // Collateral ratio must be > 200% after depositing all idle stETH, according to prev. checks
+    //         _mintMin(calc, _totalMinted, _totalDeposited, _totalDeposited + totalIdle);
+    //         return;
+    //     }
 
-        /** collateral ratio > { collateralRatioLower } **/
+    //     /** collateral ratio > { collateralRatioLower } **/
 
-        // Minting disallowed by dlp ratio
-        if (calc.dlpRatioCurrent < dlpRatioUpper) {
-            // If dlp ratio required burning (line 260), i.e. dlp ratio = 3%
-            if (amountToBurnTotal > 0) _burnEUSD(amountToBurnTotal);
+    //     // Minting disallowed by dlp ratio
+    //     if (calc.dlpRatioCurrent < dlpRatioUpper) {
+    //         // If dlp ratio required burning (line 260), i.e. dlp ratio = 3%
+    //         if (amountToBurnTotal > 0) _burnEUSD(amountToBurnTotal);
 
-            if (calc.collateralRatioCurrent > collateralRatioIdeal)
-                // Result: 2.75% < dlp ratio < 3.25% , collateral ratio = 200%
-                _withdrawNoPunish(_totalDeposited, _totalMinted);
-            // Result: 2.75% < dlp ratio < 3.25% , collateral ratio > 190%
-            return;
-        }
+    //         if (calc.collateralRatioCurrent > collateralRatioIdeal)
+    //             // Result: 2.75% < dlp ratio < 3.25% , collateral ratio = 200%
+    //             _withdrawNoPunish(_totalDeposited, _totalMinted);
+    //         // Result: 2.75% < dlp ratio < 3.25% , collateral ratio > 190%
+    //         return;
+    //     }
 
-        /** dlp ratio >= { dlpRatioUpper }, collateral ratio > { collateralRatioIdeal } **/
-        uint256 _collateralRatioIdeal = collateralRatioIdeal;
-        if (calc.collateralRatioCurrent > _collateralRatioIdeal) {
-            // dlp ratio >= { dlpRatioUpper }, collateral ratio > { collateralRatioLower }
-            calc.mintAmountGivenDlp = _getMintAmountDeltaD(calc.currentLpValue, _totalMinted, calc.vaultWeight);
-            uint256 maxMintAmountWithoutDeposit = _getMintAmountDeltaC(_totalDeposited, _totalMinted);
+    //     /** dlp ratio >= { dlpRatioUpper }, collateral ratio > { collateralRatioIdeal } **/
+    //     uint256 _collateralRatioIdeal = collateralRatioIdeal;
+    //     if (calc.collateralRatioCurrent > _collateralRatioIdeal) {
+    //         // dlp ratio >= { dlpRatioUpper }, collateral ratio > { collateralRatioLower }
+    //         calc.mintAmountGivenDlp = _getMintAmountDeltaD(calc.currentLpValue, _totalMinted, calc.vaultWeight);
+    //         uint256 maxMintAmountWithoutDeposit = _getMintAmountDeltaC(_totalDeposited, _totalMinted);
 
-            // Can mint more by depositing more
-            if (calc.mintAmountGivenDlp > maxMintAmountWithoutDeposit) {
-                // Insufficient idle stETH, so mint only amount that doesn't require deposit
-                // Result: dlp ratio > 3%, collateral ratio = 200%
-                if (totalIdle < 1 ether) _mintEUSD(maxMintAmountWithoutDeposit);
-                // Deposit more and mint more
-                else _mintMin(calc, _totalMinted, _totalDeposited, _totalDeposited + totalIdle);
-                return;
-            }
+    //         // Can mint more by depositing more
+    //         if (calc.mintAmountGivenDlp > maxMintAmountWithoutDeposit) {
+    //             // Insufficient idle stETH, so mint only amount that doesn't require deposit
+    //             // Result: dlp ratio > 3%, collateral ratio = 200%
+    //             if (totalIdle < 1 ether) _mintEUSD(maxMintAmountWithoutDeposit);
+    //             // Deposit more and mint more
+    //             else _mintMin(calc, _totalMinted, _totalDeposited, _totalDeposited + totalIdle);
+    //             return;
+    //         }
 
-            // Result: dlp ratio = 3%, collateral ratio >= 200%
-            _mintEUSD(calc.mintAmountGivenDlp);
-            if (maxMintAmountWithoutDeposit > calc.mintAmountGivenDlp) 
-                _withdrawNoPunish(_totalDeposited, _totalMinted + calc.mintAmountGivenDlp);
+    //         // Result: dlp ratio = 3%, collateral ratio >= 200%
+    //         _mintEUSD(calc.mintAmountGivenDlp);
+    //         if (maxMintAmountWithoutDeposit > calc.mintAmountGivenDlp) 
+    //             _withdrawNoPunish(_totalDeposited, _totalMinted + calc.mintAmountGivenDlp);
 
-            return;
-        }
+    //         return;
+    //     }
 
-        /** dlp ratio >= { dlpRatioUpper }, { collateralRatioLower } < collateral ratio <= { collateralRatioIdeal } **/
-        if (totalIdle < 1 ether) return;
-        // Check whether collateral ratio is > 200% after depositing all idle stETH to make sure 
-        // the amount to mint, but not the amount to burn, is calculated for collaterael ratio in _mintMin()
-        // i.e. Only consider minting eUSD if collateral ratio after depositing all idle stETH > 200%
-        if(_getCollateralRatio(_totalDeposited + totalIdle, _totalMinted) > _collateralRatioIdeal)
-            _mintMin(calc, _totalMinted, _totalDeposited, _totalDeposited + totalIdle);
-    }
+    //     /** dlp ratio >= { dlpRatioUpper }, { collateralRatioLower } < collateral ratio <= { collateralRatioIdeal } **/
+    //     if (totalIdle < 1 ether) return;
+    //     // Check whether collateral ratio is > 200% after depositing all idle stETH to make sure 
+    //     // the amount to mint, but not the amount to burn, is calculated for collaterael ratio in _mintMin()
+    //     // i.e. Only consider minting eUSD if collateral ratio after depositing all idle stETH > 200%
+    //     if(_getCollateralRatio(_totalDeposited + totalIdle, _totalMinted) > _collateralRatioIdeal)
+    //         _mintMin(calc, _totalMinted, _totalDeposited, _totalDeposited + totalIdle);
+    // }
 
     /**
      * @notice Send eUSD rebase reward to Reward Manager
@@ -802,10 +799,10 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         else return _depositedAmount * getMintPool().getAssetPrice() * 100 / _mintedAmount;
     }
 
-    function _getDlpRatio(uint256 _lpValue, uint256 _mintedAmount, uint256 _vaultWeight) private view returns (uint256) {
-        if (_mintedAmount == 0) return dlpRatioIdeal;
-        return _lpValue * 10000 * 1e20 / (_mintedAmount * _vaultWeight);
-    }
+    // function _getDlpRatio(uint256 _lpValue, uint256 _mintedAmount, uint256 _vaultWeight) private view returns (uint256) {
+    //     if (_mintedAmount == 0) return dlpRatioIdeal;
+    //     return _lpValue * 10000 * 1e20 / (_mintedAmount * _vaultWeight);
+    // }
 
     /**
      * @param _depositedAmount Amount of stETH deposited to Lybra vault
@@ -838,12 +835,12 @@ contract MatchPool is Initializable, OwnableUpgradeable {
      * @return Amount of eUSD to mint from/repay to Lybra vault in order to achieve { dlpRatioIdeal }
      *  1st condition -> mint amount, 2nd condition -> burn amount
      */
-    function _getMintAmountDeltaD(uint256 _lpValue, uint256 _mintedAmount, uint256 _vaultWeight) private view returns (uint256) {
-        uint256 oldMintedValue = _mintedAmount * _vaultWeight / 1e20;
-        uint256 newMintedValue = _lpValue * 10000 / dlpRatioIdeal;
-        return newMintedValue > oldMintedValue ? 
-            (newMintedValue - oldMintedValue) * 1e20 / _vaultWeight : (oldMintedValue - newMintedValue) * 1e20 / _vaultWeight;
-    }
+    // function _getMintAmountDeltaD(uint256 _lpValue, uint256 _mintedAmount, uint256 _vaultWeight) private view returns (uint256) {
+    //     uint256 oldMintedValue = _mintedAmount * _vaultWeight / 1e20;
+    //     uint256 newMintedValue = _lpValue * 10000 / dlpRatioIdeal;
+    //     return newMintedValue > oldMintedValue ? 
+    //         (newMintedValue - oldMintedValue) * 1e20 / _vaultWeight : (oldMintedValue - newMintedValue) * 1e20 / _vaultWeight;
+    // }
  
     /**
      * @param _lpTokenAmount Amount of LP tokens
@@ -883,8 +880,8 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         address mintPoolAddress = address(mintPool);
 
         uint256 collateralRatioAfter = _getCollateralRatio(totalDeposited[mintPoolAddress] - _amount, totalMinted[mintPoolAddress]);
-        // Withdraw only if collateral ratio remains above { collateralRatioIdeal }
-        if (collateralRatioAfter < collateralRatioIdeal) revert InsufficientCollateral();
+        // Withdraw only if collateral ratio remains above { collateralRatioLower }
+        if (collateralRatioAfter < collateralRatioLower) revert InsufficientCollateral();
 
         mintPool.withdraw(address(this), _amount);
         totalDeposited[mintPoolAddress] -= _amount;
@@ -921,47 +918,47 @@ contract MatchPool is Initializable, OwnableUpgradeable {
      * @dev _depositedAmount == _fullDeposit when idle stETH less than min. deposit requirement
      * @param _fullDeposit Max amount that can be deposited
      */
-    function _mintMin(
-        Calc memory calc, 
-        uint256 _mintedAmount, 
-        uint256 _depositedAmount, 
-        uint256 _fullDeposit
-    ) private {
-        // If (dlpRatioCurrent >= dlpRatioUpper) -> mint more to maximize reward
-        calc.mintAmountGivenDlp = _getMintAmountDeltaD(calc.currentLpValue, _mintedAmount, calc.vaultWeight);
-        // Amount to mint to achieve { collateralRatioIdeal } after depositing all idle stETH
-        calc.mintAmountGivenCollateral = _getMintAmountDeltaC(_fullDeposit, _mintedAmount);
+    // function _mintMin(
+    //     Calc memory calc, 
+    //     uint256 _mintedAmount, 
+    //     uint256 _depositedAmount, 
+    //     uint256 _fullDeposit
+    // ) private {
+    //     // If (dlpRatioCurrent >= dlpRatioUpper) -> mint more to maximize reward
+    //     calc.mintAmountGivenDlp = _getMintAmountDeltaD(calc.currentLpValue, _mintedAmount, calc.vaultWeight);
+    //     // Amount to mint to achieve { collateralRatioIdeal } after depositing all idle stETH
+    //     calc.mintAmountGivenCollateral = _getMintAmountDeltaC(_fullDeposit, _mintedAmount);
             
-        // Mint: min(mintAmountGivenDlp, mintAmountGivenCollateral)
-        if (calc.mintAmountGivenDlp > calc.mintAmountGivenCollateral) {
-            _depositToLybra(_fullDeposit - _depositedAmount, calc.mintAmountGivenCollateral);
-            // Result: dlp ratio > 3%, collateral ratio = 200%
-            return;
-        }
+    //     // Mint: min(mintAmountGivenDlp, mintAmountGivenCollateral)
+    //     if (calc.mintAmountGivenDlp > calc.mintAmountGivenCollateral) {
+    //         _depositToLybra(_fullDeposit - _depositedAmount, calc.mintAmountGivenCollateral);
+    //         // Result: dlp ratio > 3%, collateral ratio = 200%
+    //         return;
+    //     }
 
-        // Amount to deposit for 200% colalteral ratio given that { mintAmountGivenDlp } eUSD will be minted
-        calc.amountToDeposit = _getDepositAmountDelta(_depositedAmount, _mintedAmount + calc.mintAmountGivenDlp);
-        // Accept over-collateralization, i.e. deposit at least 1 ether
-        _depositToLybra(_max(calc.amountToDeposit, 1 ether), calc.mintAmountGivenDlp);
-        // Result: dlp ratio = 3%, collateral ratio >= 200%
-        return;
-    }
+    //     // Amount to deposit for 200% colalteral ratio given that { mintAmountGivenDlp } eUSD will be minted
+    //     calc.amountToDeposit = _getDepositAmountDelta(_depositedAmount, _mintedAmount + calc.mintAmountGivenDlp);
+    //     // Accept over-collateralization, i.e. deposit at least 1 ether
+    //     _depositToLybra(_max(calc.amountToDeposit, 1 ether), calc.mintAmountGivenDlp);
+    //     // Result: dlp ratio = 3%, collateral ratio >= 200%
+    //     return;
+    // }
 
     /**
      * @notice Withdraw over-collateralized stETH from Lybra so users can withdraw without punishment
      * @dev Executed only when dlp ratio < { dlpRatioUpper } && collateral ratio > { collateralRatioIdeal }
      */
-    function _withdrawNoPunish(uint256 _depositedAmount, uint256 _mintedAmount) private {
-        IMintPool mintPool = getMintPool();
-        address mintPoolAddress = address(mintPool);
+    // function _withdrawNoPunish(uint256 _depositedAmount, uint256 _mintedAmount) private {
+    //     IMintPool mintPool = getMintPool();
+    //     address mintPoolAddress = address(mintPool);
 
-        uint256 amountToWithdraw = _getDepositAmountDelta(_depositedAmount, _mintedAmount);
-        // Only withdraw if there are is no 0.1% punishment
-        if (mintPool.checkWithdrawal(address(this), amountToWithdraw) == amountToWithdraw) {
-            mintPool.withdraw(address(this), amountToWithdraw);
-            totalDeposited[mintPoolAddress] -= amountToWithdraw;
-        }
-    }
+    //     uint256 amountToWithdraw = _getDepositAmountDelta(_depositedAmount, _mintedAmount);
+    //     // Only withdraw if there are is no 0.1% punishment
+    //     if (mintPool.checkWithdrawal(address(this), amountToWithdraw) == amountToWithdraw) {
+    //         mintPool.withdraw(address(this), amountToWithdraw);
+    //         totalDeposited[mintPoolAddress] -= amountToWithdraw;
+    //     }
+    // }
 
     function monitorDeposit(uint256 _amount, uint256 _eUSDMintAmount) external onlyMonitor {
         IMintPool mintPool = getMintPool();
@@ -1000,5 +997,17 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
         mintPool.burn(address(this), _amount);
         totalMinted[mintPoolAddress] -= _amount;
+    }
+
+    /**
+     * @notice Verifies that the signer is the owner of the signing contract.
+     */
+    function isValidSignature(
+        bytes32 _hash,
+        bytes calldata _signature
+    ) external view returns (bytes4) {
+        // Validate signatures
+        require(ECDSA.recover(_hash, _signature) == owner(), "invalid signer");
+        return 0x1626ba7e;
     }
 }
