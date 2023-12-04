@@ -87,7 +87,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     uint256 public dlpRatioUpper; // 325
     uint256 public dlpRatioLower; // 275
     uint256 public dlpRatioIdeal; // 300
-    uint256 public collateralRatioUpper; // 210e18
+    uint256 public collateralRatioLower; // 190e18
     uint256 public collateralRatioLiquidate; // 150e18
     uint256 public collateralRatioIdeal; // 200e18
 
@@ -155,7 +155,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     event LPOracleChanged(address newOracle);
     event RewardManagerChanged(address newManager);
     event DlpRatioChanged(uint256 newLower, uint256 newUpper, uint256 newIdeal);
-    event CollateralRatioChanged(uint256 newLiquidate, uint256 newUpper, uint256 newIdeal);
+    event CollateralRatioChanged(uint256 newLiquidate, uint256 newLower, uint256 newIdeal);
     event BorrowRateChanged(uint256 newRate);
     event BorrowRatioChanged(
         uint256 newMax,
@@ -295,13 +295,13 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
     function setCollateralRatioRange(
         uint256 _liquidate,
-        uint256 _upper,
+        uint256 _lower,
         uint256 _ideal
     ) public onlyOwner {
         collateralRatioLiquidate = _liquidate;
-        collateralRatioUpper = _upper;
+        collateralRatioLower = _lower;
         collateralRatioIdeal = _ideal;
-        emit CollateralRatioChanged(_liquidate, _upper, _ideal);
+        emit CollateralRatioChanged(_liquidate, _lower, _ideal);
     }
 
     function setRebaseRate(uint256 _rebaseRatePerYear) public onlyOwner {
