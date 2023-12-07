@@ -43,16 +43,19 @@ contract RewardDistributor is OwnableUpgradeable {
 
     uint256 public lastDistributionTime;
 
+    address public rewardManager;
+
     address public rewardReceiver;
 
     event LastDistributionTimeUpdated(uint256 lastDistributionTime);
     event RewardSpeedUpdated(uint256 tokensPerInterval);
     event RewardDistributed(uint256 amount);
 
-    function initialize(address _receiver) public initializer {
+    function initialize(address _receiver, address _manager) public initializer {
         __Ownable_init();
 
         rewardReceiver = _receiver;
+        rewardManager = _manager;
     }
 
     function pendingReward() public view returns (uint256) {
@@ -63,6 +66,10 @@ contract RewardDistributor is OwnableUpgradeable {
 
     function setRewardReceiver(address _receiver) external onlyOwner {
         rewardReceiver = _receiver;
+    }
+
+    function setRewardManager(address _manager) external onlyOwner {
+        rewardManager = _manager;
     }
 
     function updateLastDistributionTime() external onlyOwner {
@@ -82,7 +89,7 @@ contract RewardDistributor is OwnableUpgradeable {
     }
 
     function distribute() external returns (uint256) {
-        require(msg.sender == rewardReceiver, "Only receiver can distribute");
+        require(msg.sender == rewardManager, "Only reward manager can distribute");
 
         uint256 amountToDistribute = pendingReward();
         if (amountToDistribute == 0) return 0;

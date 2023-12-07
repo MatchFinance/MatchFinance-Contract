@@ -50,6 +50,9 @@ interface IConfigurator {
 
     function peUSD() external view returns (address);
 
+    // !! @modify Eric Lee 20231207
+    function stableToken() external view returns (address);
+
     function refreshMintReward(address _account) external;
 
     function eUSDMiningIncentives() external view returns (address);

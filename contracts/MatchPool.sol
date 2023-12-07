@@ -148,6 +148,9 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
     uint256 public rebaseRatePerSec; // 6% / 365 days, scaled by 1e18
 
+    // !! @modify Code added by Eric 20231030
+    
+
     // ---------------------------------------------------------------------------------------- //
     // *************************************** Events ***************************************** //
     // ---------------------------------------------------------------------------------------- //
@@ -907,8 +910,14 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
         // TODO: use balanceOf.address(this) or lybraProtocolRevenue.earned() ???
         // Still not decided
+        // if use "earned()" to get precise amount, need to calcualte how many peUSD received
+        // and then get if & how any USDC received
+        // and then send them all to distributor
         IERC20 peUSD = IERC20(lybraConfigurator.peUSD());
-        peUSD.transfer(stakingPool, peUSD.balanceOf(address(this)));
+        peUSD.transfer(msg.sender, peUSD.balanceOf(address(this)));
+
+        IERC20 stableToken = IERC20(lybraConfigurator.stableToken());
+        stableToken.transfer(msg.sender, stableToken.balanceOf(address(this)));
     }
 
     function boostReward(uint256 _settingId, uint256 _amount) external onlyOwner {

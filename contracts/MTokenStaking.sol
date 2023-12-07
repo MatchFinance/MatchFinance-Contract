@@ -5,6 +5,7 @@ pragma solidity ^0.8.19;
 import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {IRewardManager} from "./interfaces/IRewardManager.sol";
 
 /**
  * @title MTokenStaking (staking mesLBR on Match Finance)
@@ -14,13 +15,6 @@ import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.s
  *         Reward manager records the "extra boost reward" for each user
  *         Every time user stake/unstake, the reward manager will update the reward
  */
-
-interface IRewardDistributor {
-    function distribute() external returns (uint256);
-
-    function pendingReward() external view returns (uint256);
-}
-
 contract MTokenStaking is OwnableUpgradeable {
     using SafeERC20 for IERC20;
 
@@ -35,11 +29,6 @@ contract MTokenStaking is OwnableUpgradeable {
     // Keep eyes on its contract: 0xC2966A73Bbc53f3C99268ED84D245dBE972eD89e
     IERC20 public peUSD;
     IERC20 public altStableRewardToken;
-
-    // Different reward tokens have different reward distributors
-    // e.g. peUSD distributor, mesLBR distributor
-    //      boosting and mining rewards from Lybra will be sent to these distributors
-    mapping(address rewardToken => address rewardDistributor) public rewardDistributors;
 
     address public rewardManager;
 
@@ -98,10 +87,6 @@ contract MTokenStaking is OwnableUpgradeable {
         altStableRewardToken = IERC20(_altStableRewardToken);
     }
 
-    function setRewardDistributor(address _rewardToken, address _distributor) external onlyOwner {
-        rewardDistributors[_rewardToken] = _distributor;
-    }
-
     function stake(uint256 _amount) external {
         _stake(_amount, msg.sender);
     }
@@ -125,9 +110,9 @@ contract MTokenStaking is OwnableUpgradeable {
      * @param _user User address
      */
     function pendingRewards(address _user) public view returns (uint256, uint256) {
-        uint256 newPendingBoostReward = IRewardDistributor(rewardDistributors[address(mToken)]).pendingReward();
-        uint256 newPendingProtocolRevenue = IRewardDistributor(rewardDistributors[address(peUSD)]).pendingReward() +
-            IRewardDistributor(rewardDistributors[address(altStableRewardToken)]).pendingReward();
+        uint256 newPendingBoostReward = IRewardManager(rewardManager).pendingRewardInDistributor(mToken);
+        uint256 newPendingProtocolRevenue = IRewardManager(rewardManager).pendingRewardInDistributor(peUSD) +
+           IRewardManager(rewardManager).pendingRewardInDistributor(altStableRewardToken);
 
         UserInfo memory user = users[_user];
 
@@ -238,13 +223,22 @@ contract MTokenStaking is OwnableUpgradeable {
         updateUserDebt(msg.sender);
     }
 
+    function updateRewardToDistributor() external {
+        require(msg.sender == match)
+    }
+
     /**
      * @notice Update this contract's reward status
      */
     function updateReward() public {
-        uint256 mTokenReward = IRewardDistributor(rewardDistributors[address(mToken)]).distribute();
-        uint256 peUSDReward = IRewardDistributor(rewardDistributors[address(peUSD)]).distribute();
-        uint256 altStableReward = IRewardDistributor(rewardDistributors[address(altStableRewardToken)]).distribute();
+        // uint256 mTokenReward = IRewardDistributor(rewardDistributors[address(mToken)]).distribute();
+        // uint256 peUSDReward = IRewardDistributor(rewardDistributors[address(peUSD)]).distribute();
+        // uint256 altStableReward = IRewardDistributor(rewardDistributors[address(altStableRewardToken)]).distribute();
+
+
+        uint256 mTokenReward = IRewardManager(rewardManager).distributeRewardFromDistributor(mToken);
+        uint256 peUSDReward = IRewardManager(rewardManager).distributeRewardFromDistributor(peUSD);
+        uint256 altStableReward = IRewardManager(rewardManager).distributeRewardFromDistributor(altStableRewardToken);
 
         totalBoostReward += mTokenReward;
         totalProtocolRevenue += peUSDReward + altStableReward;
