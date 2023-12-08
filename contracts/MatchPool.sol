@@ -402,7 +402,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
     // Only deposit ETH
     // Transform to ETH/LBR LP token
-    function zap() external payable {
+    function zap(uint256 _swapMinOut, uint256 _lpMinETH, uint256 _lpMinLBR) external payable {
         if (stakePaused) revert StakePaused();
 
         uint256 ethToSwap = msg.value / 2;
@@ -411,7 +411,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         swapPath[1] = LBR;
         // Swap half of the ETH to LBR
         uint256[] memory amounts = ROUTER.swapExactETHForTokens{ value: ethToSwap }(
-            0,
+            _swapMinOut,
             swapPath,
             address(this),
             block.timestamp + 1
@@ -422,7 +422,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         uint256 ethToAdd = msg.value - ethToSwap;
         (uint256 lbrAdded, uint256 ethAdded, uint256 lpAmount) = ROUTER.addLiquidityETH{
             value: ethToAdd
-        }(LBR, lbrAmount, 0, 0, address(this), block.timestamp + 1);
+        }(LBR, lbrAmount, _lpMinLBR, _lpMinETH, address(this), block.timestamp + 1);
 
         // Refund excess amounts if values of ETH and LBR swapped from ETH are not the same
         if (ethToAdd > ethAdded) {
