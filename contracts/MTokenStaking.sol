@@ -48,7 +48,6 @@ contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         uint256 stakedAmount;
         uint256 boostRewardDebt;
         uint256 protocolRevenueDebt;
-        uint256 lastDistributionTime;
     }
     mapping(address user => UserInfo info) public users;
 
