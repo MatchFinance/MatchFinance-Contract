@@ -75,7 +75,15 @@ contract RewardManager is Initializable, OwnableUpgradeable {
     // *************************************** Events ***************************************** //
     // ---------------------------------------------------------------------------------------- //
 
-    event RewardShareChanged(uint128 newTreasuryShare, uint128 newStakerShare);
+    event dlpRewardPoolChanged(address newPool);
+    event MiningRewardPoolsChanged(address newMiningIncentive, address newEUSD);
+    event ProtocolRevenuePoolChanged(address newPool);
+    event mesLBRStakingPoolChanged(address newPool);
+    event RewardSharesChanged(uint128 newTreasuryShare, uint128 newStakerShare);
+    event TreasuryChanged(address newTreausry);
+    event mesLBRChanged(address newMesLBR);
+    event RewardDistributorChanged(address rewardToken, address newDistributor);
+    event LybraConfiguratorChanged(address newConfigurator);
     event DLPRewardClaimed(address account, uint256 rewardAmount);
     event LSDRewardClaimed(address account, uint256 rewardAmount);
     event eUSDRewardClaimed(address account, uint256 rewardAmount);
@@ -105,6 +113,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
             matchPoolShares = rewardPool.balanceOf(_matchPool);
             // eUSD mining incentive pool is calculated with the total borrowed(minted) amount of eUSD or peUSD
         else if (_rewardPool == miningIncentive) matchPoolShares = rewardPool.stakedOf(_matchPool);
+        else return (0, 0, 0);
 
         uint256 rpt = rewardPool.rewardPerToken();
 
@@ -128,6 +137,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
         uint256 rewardAmount;
         if (_rewardPool == dlpRewardPool) rewardAmount = dlpEarned + (lsdEarned * stakerShare) / 100;
         else if (_rewardPool == miningIncentive) rewardAmount = (lsdEarned * (100 - stakerShare - treasuryShare)) / 100;
+        else return 0;
 
         (uint256 rpt, ) = _rewardPerToken(address(0), _rewardPool, rewardAmount);
         return rpt;
@@ -139,6 +149,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
         uint256 rewardAmount;
         if (_rewardPool == dlpRewardPool) rewardAmount = dlpEarned + (lsdEarned * stakerShare) / 100;
         else if (_rewardPool == miningIncentive) rewardAmount = (lsdEarned * (100 - stakerShare - treasuryShare)) / 100;
+        else return 0;
 
         return _earned(_account, _rewardPool, rewardAmount);
     }
@@ -276,42 +287,49 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 
     function setDlpRewardPool(address _dlp) external onlyOwner {
         dlpRewardPool = _dlp;
+        emit dlpRewardPoolChanged(_dlp);
     }
 
     function setMiningRewardPools(address _mining, address _eUSD) external onlyOwner {
         miningIncentive = _mining;
         eUSD = _eUSD;
+        emit MiningRewardPoolsChanged(_mining, _eUSD);
     }
 
     function setProtocolRevenuePool(address _protocolRevenue) external onlyOwner {
         lybraProtocolRevenue = _protocolRevenue;
+        emit ProtocolRevenuePoolChanged(_protocolRevenue);
     }
 
     function setMeslbrStakingPool(address _stakingPool) external onlyOwner {
         stakingPool = IStakingPool(_stakingPool);
+        emit mesLBRStakingPoolChanged(_stakingPool);
     }
 
     function setMiningRewardShares(uint128 _treasuryShare, uint128 _stakerShare) public onlyOwner {
         treasuryShare = _treasuryShare;
         stakerShare = _stakerShare;
-
-        emit RewardShareChanged(_treasuryShare, _stakerShare);
+        emit RewardSharesChanged(_treasuryShare, _stakerShare);
     }
 
     function setTreasury(address _treasury) external onlyOwner {
         treasury = _treasury;
+        emit TreasuryChanged(_treasury);
     }
 
     function setMesLBR(address _mesLBR) external onlyOwner {
         mesLBR = IERC20Mintable(_mesLBR);
+        emit mesLBRChanged(_mesLBR);
     }
 
     function setRewardDistributor(address _rewardToken, address _rewardDistributor) external onlyOwner {
         rewardDistributors[_rewardToken] = _rewardDistributor;
+        emit RewardDistributorChanged(_rewardToken, _rewardDistributor);
     }
 
     function setLybraConfigurator(address _lybraConfigurator) external onlyOwner {
-        lybraConfigurator = _lybraConfigurator;
+        lybraConfigurator = IConfigurator(_lybraConfigurator);
+        emit LybraConfiguratorChanged(_lybraConfigurator);
     }
 
     // ---------------------------------------------------------------------------------------- //
@@ -490,6 +508,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
             IMatchPool(matchPool).claimProtocolRevenue();
         }
 
+        // ERROR
         // !! @modify Code added by Eric 20231030
         // pendingBoostReward has been updated in the previous "getReward" funciton inside "getAllRewards"
         if (pendingBoostReward > 0) {
@@ -522,7 +541,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
     }
 
     function distributeRewardFromDistributor(address _rewardToken) external returns (uint256) {
-        require(msg.sender == stakingPool, "Only staking pool can distribute reward");
+        require(msg.sender == address(stakingPool), "Only staking pool can distribute reward");
 
         IRewardDistributor distributor = IRewardDistributor(rewardDistributors[_rewardToken]);
         return distributor.distribute();
