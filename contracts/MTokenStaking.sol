@@ -232,11 +232,6 @@ contract MTokenStaking is OwnableUpgradeable {
         updateUserDebt(msg.sender);
     }
 
-    // ERROR
-    function updateRewardToDistributor() external {
-        require(msg.sender == match)
-    }
-
     /**
      * @notice Update this contract's reward status
      */
@@ -260,7 +255,7 @@ contract MTokenStaking is OwnableUpgradeable {
         else revert NoStakedAmount();
 
         // ERROR
-        emit RewardUpdated(_boostReward, _protocolRevenue);
+        emit RewardUpdated(totalBoostReward, totalProtocolRevenue);
     }
 
     function updateUserDebt(address _user) internal {

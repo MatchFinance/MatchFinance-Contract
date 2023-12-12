@@ -512,18 +512,18 @@ contract RewardManager is Initializable, OwnableUpgradeable {
         // !! @modify Code added by Eric 20231030
         // pendingBoostReward has been updated in the previous "getReward" funciton inside "getAllRewards"
         if (pendingBoostReward > 0) {
-            _updateRewardInDistributors(pendingBoostReward, protocolRevenue);
+            _updateRewardInDistributors(pendingBoostReward);
 
             // delete this buffer
             pendingBoostReward = 0;
-        } else _updateRewardInDistributors(0, protocolRevenue);
+        } else _updateRewardInDistributors(0);
 
         stakingPool.updateReward();
     }
 
-    function _updateRewardInDistributors() internal {
+    function _updateRewardInDistributors(uint256 _boostReward) internal {
         // Mint boost reward mesLBR to reward distributor
-        mesLBR.mint(rewardDistributors[address(mesLBR)], pendingBoostReward);
+        mesLBR.mint(rewardDistributors[address(mesLBR)], _boostReward);
 
         // Transfer stablecoin protocol revenue to reward distributor
         address peUSD = lybraConfigurator.peUSD();
