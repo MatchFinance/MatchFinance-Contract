@@ -47,6 +47,8 @@ contract RewardDistributor is OwnableUpgradeable {
 
     address public rewardReceiver;
 
+    event RewardManagerChanged(address newManager);
+    event RewardReceiverChanged(address newReceiver);
     event LastDistributionTimeUpdated(uint256 lastDistributionTime);
     event RewardSpeedUpdated(uint256 tokensPerInterval);
     event RewardDistributed(uint256 amount);
@@ -66,10 +68,12 @@ contract RewardDistributor is OwnableUpgradeable {
 
     function setRewardReceiver(address _receiver) external onlyOwner {
         rewardReceiver = _receiver;
+        emit RewardReceiverChanged(_receiver);
     }
 
     function setRewardManager(address _manager) external onlyOwner {
         rewardManager = _manager;
+        emit RewardManagerChanged(_manager);
     }
 
     function updateLastDistributionTime() external onlyOwner {
