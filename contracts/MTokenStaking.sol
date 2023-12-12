@@ -3,9 +3,12 @@
 pragma solidity ^0.8.19;
 
 import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {
+    ReentrancyGuardUpgradeable
+} from "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {IRewardManager} from "./interfaces/IRewardManager.sol";
+import { IRewardManager } from "./interfaces/IRewardManager.sol";
 
 /**
  * @title MTokenStaking (staking mesLBR on Match Finance)
@@ -15,7 +18,7 @@ import {IRewardManager} from "./interfaces/IRewardManager.sol";
  *         Reward manager records the "extra boost reward" for each user
  *         Every time user stake/unstake, the reward manager will update the reward
  */
-contract MTokenStaking is OwnableUpgradeable {
+contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     using SafeERC20 for IERC20;
 
     uint256 public constant SCALE = 1e18;
@@ -65,6 +68,7 @@ contract MTokenStaking is OwnableUpgradeable {
 
     function initialize(address _rewardManager, address _mToken, address _peUSD) external initializer {
         __Ownable_init();
+        __ReentrancyGuard_init();
 
         rewardManager = _rewardManager;
         mToken = IERC20(_mToken);
@@ -121,7 +125,7 @@ contract MTokenStaking is OwnableUpgradeable {
     function pendingRewards(address _user) public view returns (uint256, uint256) {
         uint256 newPendingBoostReward = IRewardManager(rewardManager).pendingRewardInDistributor(address(mToken));
         uint256 newPendingProtocolRevenue = IRewardManager(rewardManager).pendingRewardInDistributor(address(peUSD)) +
-           IRewardManager(rewardManager).pendingRewardInDistributor(address(altStableRewardToken));
+            IRewardManager(rewardManager).pendingRewardInDistributor(address(altStableRewardToken));
 
         UserInfo memory user = users[_user];
 
@@ -240,10 +244,11 @@ contract MTokenStaking is OwnableUpgradeable {
         // uint256 peUSDReward = IRewardDistributor(rewardDistributors[address(peUSD)]).distribute();
         // uint256 altStableReward = IRewardDistributor(rewardDistributors[address(altStableRewardToken)]).distribute();
 
-
         uint256 mTokenReward = IRewardManager(rewardManager).distributeRewardFromDistributor(address(mToken));
         uint256 peUSDReward = IRewardManager(rewardManager).distributeRewardFromDistributor(address(peUSD));
-        uint256 altStableReward = IRewardManager(rewardManager).distributeRewardFromDistributor(address(altStableRewardToken));
+        uint256 altStableReward = IRewardManager(rewardManager).distributeRewardFromDistributor(
+            address(altStableRewardToken)
+        );
 
         totalBoostReward += mTokenReward;
         totalProtocolRevenue += peUSDReward + altStableReward;
@@ -251,8 +256,7 @@ contract MTokenStaking is OwnableUpgradeable {
         if (totalStaked != 0) {
             accBoostRewardPerMToken += (mTokenReward * SCALE) / totalStaked;
             accProtocolRevenuePerMToken += ((peUSDReward + altStableReward) * SCALE) / totalStaked;
-        }
-        else revert NoStakedAmount();
+        } else revert NoStakedAmount();
 
         // ERROR
         emit RewardUpdated(totalBoostReward, totalProtocolRevenue);
