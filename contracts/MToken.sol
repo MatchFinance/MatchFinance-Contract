@@ -22,6 +22,9 @@ import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/O
 contract MToken is ERC20Upgradeable, OwnableUpgradeable {
     mapping(address account => bool isValidMinter) public isMinter;
 
+    event MinterAdded(address minter);
+    event MinterRemoved(address minter);
+
     function initialize(string memory name_, string memory symbol_) external initializer {
         __ERC20_init(name_, symbol_);
         __Ownable_init();
@@ -29,10 +32,12 @@ contract MToken is ERC20Upgradeable, OwnableUpgradeable {
 
     function addMinter(address _minter) external onlyOwner {
         isMinter[_minter] = true;
+        emit MinterAdded(_minter);
     }
 
     function removeMinter(address _minter) external onlyOwner {
         isMinter[_minter] = false;
+        emit MinterRemoved(_minter);
     }
 
     function mint(address _to, uint256 _amount) external {
