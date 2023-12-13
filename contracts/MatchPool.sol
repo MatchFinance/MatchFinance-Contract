@@ -24,6 +24,7 @@ error StakePaused();
 error WithdrawPaused();
 error BorrowPaused();
 error ExceedLimit();
+error InvalidRange(uint256 paramPos);
 
 contract MatchPool is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
     using SafeERC20 for IERC20;
@@ -132,6 +133,10 @@ contract MatchPool is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradea
     }
     mapping(address => InterestTracker) interestTracker;
 
+    uint256 constant MIN_LIQUIDATION_DISCOUNT = 100e18;
+    uint256 constant MAX_LIQUIDATION_DISCOUNT = 120e18;
+    uint256 constant MAX_CLOSE_FACTOR = 50e18;
+
     // ---------------------------------------------------------------------------------------- //
     // *************************************** Events ***************************************** //
     // ---------------------------------------------------------------------------------------- //
@@ -197,11 +202,9 @@ contract MatchPool is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradea
     // function initialize() public initializer {
     //     __Ownable_init();
 
-    //     setDlpRatioRange(275, 325, 300);
     //     setCollateralRatioRange(190e18, 210e18, 200e18);
     //     setBorrowRate(1e17);
     //     setBorrowRatio(80e18, 75e18, 50e18);
-    //     setLiquidationParams(105e18, 20e18);
     //     setLiquidationParamsNormal(110e18, 50e18);
     //     setStakeLimit(60000e18);
     //     setSupplyLimit(4000000e18);
@@ -282,16 +285,16 @@ contract MatchPool is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradea
         emit RewardManagerChanged(_rewardManager);
     }
 
-    function setDlpRatioRange(
-        uint256 _lower,
-        uint256 _upper,
-        uint256 _ideal
-    ) public onlyOwner {
-        dlpRatioLower = _lower;
-        dlpRatioUpper = _upper;
-        dlpRatioIdeal = _ideal;
-        emit DlpRatioChanged(_lower, _upper, _ideal);
-    }
+    // function setDlpRatioRange(
+    //     uint256 _lower,
+    //     uint256 _upper,
+    //     uint256 _ideal
+    // ) public onlyOwner {
+    //     dlpRatioLower = _lower;
+    //     dlpRatioUpper = _upper;
+    //     dlpRatioIdeal = _ideal;
+    //     emit DlpRatioChanged(_lower, _upper, _ideal);
+    // }
 
     function setCollateralRatioRange(
         uint256 _liquidate,
@@ -320,19 +323,22 @@ contract MatchPool is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradea
         emit BorrowRatioChanged(_individual, _global, _liquidation);
     }
 
-    function setLiquidationParams(
-        uint128 _discount,
-        uint128 _closeFactor
-    ) public onlyOwner {
-        liquidationDiscount = _discount;
-        closeFactor = _closeFactor;
-        emit LiquidationParamsChanged(_discount, _closeFactor);
-    }
+    // function setLiquidationParams(
+    //     uint128 _discount,
+    //     uint128 _closeFactor
+    // ) public onlyOwner {
+    //     liquidationDiscount = _discount;
+    //     closeFactor = _closeFactor;
+    //     emit LiquidationParamsChanged(_discount, _closeFactor);
+    // }
 
     function setLiquidationParamsNormal(
         uint128 _discount,
         uint128 _closeFactor
     ) public onlyOwner {
+        if (_discount < MIN_LIQUIDATION_DISCOUNT && _discount > MAX_LIQUIDATION_DISCOUNT)
+            revert InvalidRange(1);
+        if (_closeFactor > MAX_CLOSE_FACTOR) revert InvalidRange(2);
         liquidationDiscountNormal = _discount;
         closeFactorNormal = _closeFactor;
         emit LiquidationParamsNormalChanged(_discount, _closeFactor);
