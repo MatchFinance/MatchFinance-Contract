@@ -99,11 +99,11 @@ contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         emit AltStableRewardChanged(_altStableRewardToken);
     }
 
-    function stake(uint256 _amount) external {
+    function stake(uint256 _amount) external nonReentrant {
         _stake(_amount, msg.sender);
     }
 
-    function unstake(uint256 _amount) external {
+    function unstake(uint256 _amount) external nonReentrant {
         _unstake(_amount, msg.sender);
     }
 
@@ -219,7 +219,7 @@ contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         emit Unstake(_user, _amount, pendingBoostReward, pendingProtocolRevenue);
     }
 
-    function harvest() external {
+    function harvest() external nonReentrant {
         UserInfo storage user = users[msg.sender];
 
         updateReward();

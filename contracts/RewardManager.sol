@@ -4,11 +4,11 @@ pragma solidity ^0.8.19;
 
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import "./interfaces/LybraInterfaces.sol";
 import "./interfaces/IMatchPool.sol";
-
 import "./interfaces/IStakingPool.sol";
 
 interface IERC20Mintable {
@@ -25,7 +25,7 @@ interface IRewardDistributor {
 error UnpaidInterest();
 error RewardNotOpen();
 
-contract RewardManager is Initializable, OwnableUpgradeable {
+contract RewardManager is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
     IMatchPool public matchPool;
 
     // reward pool => amount
@@ -88,11 +88,15 @@ contract RewardManager is Initializable, OwnableUpgradeable {
     event LSDRewardClaimed(address account, uint256 rewardAmount);
     event eUSDRewardClaimed(address account, uint256 rewardAmount);
 
-    function initialize(address _matchPool) public initializer {
-        __Ownable_init();
+    // function initialize(address _matchPool) public initializer {
+    //     __Ownable_init();
 
-        matchPool = IMatchPool(_matchPool);
-        setMiningRewardShares(0, 20);
+    //     matchPool = IMatchPool(_matchPool);
+    //     setMiningRewardShares(0, 20);
+    // }
+
+    function initialize() public reinitializer(2) {
+        __ReentrancyGuard_init();
     }
 
     // ---------------------------------------------------------------------------------------- //
@@ -420,7 +424,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
         pendingBoostReward += boostReward;
     }
 
-    function getReward(address _rewardPool, bool _stakeNow) public {
+    function getReward(address _rewardPool, bool _stakeNow) public nonReentrant {
         if (address(mesLBR) == address(0)) revert RewardNotOpen();
 
         address _dlpRewardPool = dlpRewardPool;

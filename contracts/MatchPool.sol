@@ -4,6 +4,7 @@ pragma solidity ^0.8.19;
 
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
@@ -24,7 +25,7 @@ error WithdrawPaused();
 error BorrowPaused();
 error ExceedLimit();
 
-contract MatchPool is Initializable, OwnableUpgradeable {
+contract MatchPool is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
     using SafeERC20 for IERC20;
 
     address constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
@@ -193,17 +194,23 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         _;
     }
 
-    function initialize() public initializer {
-        __Ownable_init();
+    // function initialize() public initializer {
+    //     __Ownable_init();
 
-        setDlpRatioRange(275, 325, 300);
-        setCollateralRatioRange(190e18, 210e18, 200e18);
-        setBorrowRate(1e17);
-        setBorrowRatio(80e18, 75e18, 50e18);
-        setLiquidationParams(105e18, 20e18);
-        setLiquidationParamsNormal(110e18, 50e18);
-        setStakeLimit(60000e18);
-        setSupplyLimit(4000000e18);
+    //     setDlpRatioRange(275, 325, 300);
+    //     setCollateralRatioRange(190e18, 210e18, 200e18);
+    //     setBorrowRate(1e17);
+    //     setBorrowRatio(80e18, 75e18, 50e18);
+    //     setLiquidationParams(105e18, 20e18);
+    //     setLiquidationParamsNormal(110e18, 50e18);
+    //     setStakeLimit(60000e18);
+    //     setSupplyLimit(4000000e18);
+    // }
+
+    function initialize() public reinitializer(2) {
+        __ReentrancyGuard_init();
+        // Initialize stETH pool global interest index
+        interestTracker[address(mintPools[0])].interestIndexGlobal = 1e18;
     }
 
     // ---------------------------------------------------------------------------------------- //
@@ -367,13 +374,13 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         bool _isRebase
     ) external onlyOwner {
         mintPools.push(IMintPool(_mintPool));
-        depositHelpers[_mintPool] = IDepositHelper(_helper);
+        changeHelper(_mintPool, _helper);
         if (_isRebase) setRebase(_mintPool, _isRebase);
+        interestTracker[_mintPool].interestIndexGlobal = 1e18;
         emit MintPoolAdded(_mintPool);
-        emit DepositHelperChanged(_mintPool, _helper);
     }
 
-    function changeHelper(address _mintPool, address _helper) external onlyOwner {
+    function changeHelper(address _mintPool, address _helper) public onlyOwner {
         depositHelpers[_mintPool] = IDepositHelper(_helper);
         emit DepositHelperChanged(_mintPool, _helper);
     }
@@ -391,7 +398,11 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
     // Only deposit ETH
     // Transform to ETH/LBR LP token
-    function zap(uint256 _swapMinOut, uint256 _lpMinETH, uint256 _lpMinLBR) external payable {
+    function zap(
+        uint256 _swapMinOut,
+        uint256 _lpMinETH,
+        uint256 _lpMinLBR
+    ) external payable nonReentrant {
         if (stakePaused) revert StakePaused();
 
         uint256 ethToSwap = msg.value / 2;
@@ -543,7 +554,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         mintUSD(mintPoolAddress);
     }
 
-    function withdrawLSD(uint256 _poolIndex, uint256 _amount) external {
+    function withdrawLSD(uint256 _poolIndex, uint256 _amount) external nonReentrant {
         PoolInfo memory poolInfo;
         poolInfo.mintPool = mintPools[_poolIndex];
         poolInfo.mintPoolAddress = address(poolInfo.mintPool);
@@ -635,7 +646,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     }
 
     // Take out/borrow eUSD/peUSD from Match Pool
-    function borrowUSD(uint256 _poolIndex, uint256 _amount) external {
+    function borrowUSD(uint256 _poolIndex, uint256 _amount) external nonReentrant {
         if (borrowPaused) revert BorrowPaused();
 
         PoolInfo memory poolInfo;
@@ -649,7 +660,8 @@ contract MatchPool is Initializable, OwnableUpgradeable {
             supplied[poolInfo.mintPoolAddress][msg.sender],
             poolInfo.tokenPrice
         );
-        uint256 available = totalMinted[poolInfo.mintPoolAddress] - totalBorrowed[poolInfo.mintPoolAddress];
+        uint256 available = totalMinted[poolInfo.mintPoolAddress] - 
+            totalBorrowed[poolInfo.mintPoolAddress];
         uint256 newBorrowAmount = borrowInfo.principal + _amount;
         accrueInterest(poolInfo.mintPoolAddress, msg.sender);
         uint256 borrowPlusInterest = newBorrowAmount + borrowInfo.accInterest;
