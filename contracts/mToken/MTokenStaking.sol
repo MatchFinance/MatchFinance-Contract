@@ -8,7 +8,7 @@ import {
 } from "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import { IRewardManager } from "./interfaces/IRewardManager.sol";
+import { IRewardManager } from "../interfaces/IRewardManager.sol";
 
 /**
  * @title MTokenStaking (staking mesLBR on Match Finance)
@@ -33,15 +33,18 @@ contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     IERC20 public peUSD;
     IERC20 public altStableRewardToken;
 
+    // All reward calculation and fetching are done by reward manager
     address public rewardManager;
 
-    // total esLBR and USDC to be distributed
+    // Total esLBR and USDC to be distributed
     uint256 public totalBoostReward;
     uint256 public totalProtocolRevenue;
 
+    // Accumulated reward per staked mesLBR
     uint256 public accBoostRewardPerMToken;
     uint256 public accProtocolRevenuePerMToken;
 
+    // Total staked mesLBR
     uint256 public totalStaked;
 
     struct UserInfo {
@@ -63,7 +66,6 @@ contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     error InsufficientStableReward();
     error ZeroAmount();
     error NotRewardManager();
-    error NoStakedAmount();
 
     function initialize(address _rewardManager, address _mToken, address _peUSD) external initializer {
         __Ownable_init();
@@ -117,9 +119,13 @@ contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
     /**
      * @notice Get pending rewards for a user
-     *         Rewards = boost reward + protocol revenue
+     *         Rewards = boost reward (mesLBR) + protocol revenue (peUSD/USDC)
+     *         (Protocol revenue is calculated as one number, not distinguish peUSD and USDC)
      *
      * @param _user User address
+     *
+     * @return pendingBoostReward     Pending boost reward
+     * @return pendingProtocolRevenue Pending protocol revenue
      */
     function pendingRewards(address _user) public view returns (uint256, uint256) {
         uint256 newPendingBoostReward = IRewardManager(rewardManager).pendingRewardInDistributor(address(mToken));
@@ -128,13 +134,11 @@ contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
         UserInfo memory user = users[_user];
 
-        uint256 pendingBoostReward = (user.stakedAmount * (accBoostRewardPerMToken + newPendingBoostReward)) /
-            SCALE -
-            user.boostRewardDebt;
-        uint256 pendingProtocolRevenue = (user.stakedAmount *
-            (accProtocolRevenuePerMToken + newPendingProtocolRevenue)) /
-            SCALE -
-            user.protocolRevenueDebt;
+        uint256 newAccBoostReward = accBoostRewardPerMToken + (newPendingBoostReward * SCALE) / totalStaked;
+        uint256 newAccProtocolRevenue = accProtocolRevenuePerMToken + (newPendingProtocolIncome * SCALE) / totalStaked;
+
+        uint256 pendingBoostReward = (user.stakedAmount * newAccBoostReward) / SCALE - user.boostRewardDebt;
+        uint256 pendingProtocolRevenue = (user.stakedAmount * newAccProtocolRevenue) / SCALE - user.protocolRevenueDebt;
 
         return (pendingBoostReward, pendingProtocolRevenue);
     }
@@ -147,21 +151,12 @@ contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     function compound() external {
         (uint256 pendingBoostReward, uint256 pendingProtocolRevenue) = pendingRewards(msg.sender);
 
+        // Distribute stablecoin reward
         _distributeStableReward(msg.sender, pendingProtocolRevenue);
 
+        // Distribute mesLBR reward and re-stake
         mToken.safeTransfer(msg.sender, pendingBoostReward);
         _stake(pendingBoostReward, msg.sender);
-    }
-
-    function _distributeStableReward(address _to, uint256 _amount) internal {
-        uint256 peUSDBalance = peUSD.balanceOf(address(this));
-        uint256 altStableRewardBalance = altStableRewardToken.balanceOf(address(this));
-
-        if (_amount <= peUSDBalance) peUSD.safeTransfer(_to, _amount);
-        else if (peUSDBalance < _amount && _amount <= peUSDBalance + altStableRewardBalance) {
-            peUSD.safeTransfer(_to, peUSDBalance);
-            altStableRewardToken.safeTransfer(_to, _amount - peUSDBalance);
-        } else revert InsufficientStableReward();
     }
 
     function _stake(uint256 _amount, address _user) internal {
@@ -191,7 +186,7 @@ contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         user.stakedAmount += _amount;
         totalStaked += _amount;
 
-        updateUserDebt(msg.sender);
+        _updateUserDebt(msg.sender);
 
         emit Stake(_user, _amount, pendingBoostReward, pendingProtocolRevenue);
     }
@@ -214,7 +209,7 @@ contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         mToken.safeTransfer(_user, pendingBoostReward + _amount);
         peUSD.safeTransfer(_user, pendingProtocolRevenue);
 
-        updateUserDebt(msg.sender);
+        _updateUserDebt(msg.sender);
 
         emit Unstake(_user, _amount, pendingBoostReward, pendingProtocolRevenue);
     }
@@ -232,7 +227,7 @@ contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         mToken.safeTransfer(msg.sender, pendingBoostReward);
         _distributeStableReward(msg.sender, pendingProtocolRevenue);
 
-        updateUserDebt(msg.sender);
+        _updateUserDebt(msg.sender);
     }
 
     /**
@@ -243,6 +238,8 @@ contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         // uint256 peUSDReward = IRewardDistributor(rewardDistributors[address(peUSD)]).distribute();
         // uint256 altStableReward = IRewardDistributor(rewardDistributors[address(altStableRewardToken)]).distribute();
 
+        if (totalStaked == 0) return;
+
         uint256 mTokenReward = IRewardManager(rewardManager).distributeRewardFromDistributor(address(mToken));
         uint256 peUSDReward = IRewardManager(rewardManager).distributeRewardFromDistributor(address(peUSD));
         uint256 altStableReward = IRewardManager(rewardManager).distributeRewardFromDistributor(
@@ -252,21 +249,33 @@ contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         totalBoostReward += mTokenReward;
         totalProtocolRevenue += peUSDReward + altStableReward;
 
-        if (totalStaked != 0) {
-            accBoostRewardPerMToken += (mTokenReward * SCALE) / totalStaked;
-            accProtocolRevenuePerMToken += ((peUSDReward + altStableReward) * SCALE) / totalStaked;
-        } else revert NoStakedAmount();
+        accBoostRewardPerMToken += (mTokenReward * SCALE) / totalStaked;
+        accProtocolRevenuePerMToken += ((peUSDReward + altStableReward) * SCALE) / totalStaked;
 
-        // ERROR
         emit RewardUpdated(totalBoostReward, totalProtocolRevenue);
     }
 
-    function updateUserDebt(address _user) internal {
+    function _updateUserDebt(address _user) internal {
         users[_user].boostRewardDebt = (users[_user].stakedAmount * accBoostRewardPerMToken) / SCALE;
         users[_user].protocolRevenueDebt = (users[_user].stakedAmount * accProtocolRevenuePerMToken) / SCALE;
     }
 
     function emergencyWithdraw(address _token, uint256 _amount) external onlyOwner {
         IERC20(_token).safeTransfer(msg.sender, _amount);
+    }
+
+    function _distributeStableReward(address _to, uint256 _amount) internal {
+        uint256 peUSDBalance = peUSD.balanceOf(address(this));
+
+        // If the user's stablecoin pending reward is less than the peUSD balance, give him peUSD
+        if (_amount <= peUSDBalance) peUSD.safeTransfer(_to, _amount);
+        else {
+            uint256 altStableRewardBalance = altStableRewardToken.balanceOf(address(this));
+
+            if (_amount > peUSDBalance && _amount <= peUSDBalance + altStableRewardBalance) {
+                peUSD.safeTransfer(_to, peUSDBalance);
+                altStableRewardToken.safeTransfer(_to, _amount - peUSDBalance);
+            } else revert InsufficientStableReward();
+        }
     }
 }
