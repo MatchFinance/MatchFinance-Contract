@@ -166,10 +166,7 @@ contract RewardManager is Initializable, OwnableUpgradeable, ReentrancyGuardUpgr
 
         for (uint256 i; i < mintPools.length; ) {
             if (matchPool.isRebase(mintPools[i])) {
-                (uint256 borrowedAmount, , , ) = matchPool.borrowed(
-                    mintPools[i],
-                    _account
-                );
+                (uint256 borrowedAmount, , , ) = matchPool.borrowed(mintPools[i], _account);
                 if (borrowedAmount > 0) return true;
             }
 
@@ -413,10 +410,8 @@ contract RewardManager is Initializable, OwnableUpgradeable, ReentrancyGuardUpgr
         if (_isRebase) {
             if (!hasBorrowedEUSD(_account))
                 userRewards[_eUSD][_account] = _earned(_account, _eUSD, 0);
-            // Users who borrowed eUSD will not share rebase reward
-            else
-                userRewards[_eUSD][treasury] += (_earned(_account, _eUSD, 0) - 
-                    userRewards[_eUSD][_account]);
+                // Users who borrowed eUSD will not share rebase reward
+            else userRewards[_eUSD][treasury] += (_earned(_account, _eUSD, 0) - userRewards[_eUSD][_account]);
             userRewardsPerTokenPaid[_eUSD][_account] = rewardPerTokenStored[_eUSD];
         }
 
@@ -444,7 +439,7 @@ contract RewardManager is Initializable, OwnableUpgradeable, ReentrancyGuardUpgr
 
             // !! @modify Code added by Eric 20231030
             // Only update when users claim their rewards
-            updateStakingPoolReward();
+            updateRewardDistributors();
             return;
         }
 
@@ -473,24 +468,25 @@ contract RewardManager is Initializable, OwnableUpgradeable, ReentrancyGuardUpgr
 
             // !! @modify Code added by Eric 20231030
             // Only update when users claim their rewards
-            updateStakingPoolReward();
+            updateRewardDistributors();
             return;
         }
     }
 
-    function updateStakingPoolReward() public {
+    function updateRewardDistributors() public {
         // !! @modify Code added by Eric 20231030
-        // TODO: still not consider if peUSD is not enough
 
         uint256 protocolRevenue = IRewardPool(lybraProtocolRevenue).earned(address(matchPool));
 
         // Get peUSD(or peUSD & USDC)
         // Protocol revenue will first goes to this contract
+        // In lybra protocol revenue cotract, it will give peUSD if it is enough,
+        // if it is not enough, it will give peUSD + altStablecoin.
+        // But it will not tell you the amount of each token.
         if (protocolRevenue > 0) {
             IMatchPool(matchPool).claimProtocolRevenue();
         }
 
-        // ERROR
         // !! @modify Code added by Eric 20231030
         // pendingBoostReward has been updated in the previous "getReward" funciton inside "getAllRewards"
         if (pendingBoostReward > 0) {
@@ -500,9 +496,14 @@ contract RewardManager is Initializable, OwnableUpgradeable, ReentrancyGuardUpgr
             pendingBoostReward = 0;
         } else _updateRewardInDistributors(0);
 
-        stakingPool.updateReward();
+        // * It seems that no need to update in staking pool here
+        // * Just update when users interact with staking pool is OK
+        // stakingPool.updateReward();
     }
 
+    /**
+     * @notice Distribute the reward to corresponding distributor contracts
+     */
     function _updateRewardInDistributors(uint256 _boostReward) internal {
         // Mint boost reward mesLBR to reward distributor
         mesLBR.mint(rewardDistributors[address(mesLBR)], _boostReward);
@@ -511,10 +512,17 @@ contract RewardManager is Initializable, OwnableUpgradeable, ReentrancyGuardUpgr
         address peUSD = lybraConfigurator.peUSD();
         address altStablecoin = lybraConfigurator.stableToken();
 
+        // ! Transfer all peUSD and altStablecoin to their distributors
         IERC20(peUSD).transfer(rewardDistributors[peUSD], IERC20(peUSD).balanceOf(address(this)));
-        IERC20(altStablecoin).transfer(rewardDistributors[altStablecoin], IERC20(altStablecoin).balanceOf(address(this)));
+        IERC20(altStablecoin).transfer(
+            rewardDistributors[altStablecoin],
+            IERC20(altStablecoin).balanceOf(address(this))
+        );
     }
 
+    /**
+     * @notice Get pending reward in a specific distributor
+     */
     function pendingRewardInDistributor(address _rewardToken) external returns (uint256) {
         address _distributor = rewardDistributors[_rewardToken];
         if (_distributor == address(0)) return 0;

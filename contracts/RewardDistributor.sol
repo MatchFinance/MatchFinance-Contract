@@ -37,15 +37,23 @@ contract RewardDistributor is OwnableUpgradeable {
     uint256 public constant SCALE = 1e18;
 
     // Reward token address
+    // Each reward token has a distributor
     address public rewardToken;
 
+    address public rewardManager;
+    address public rewardReceiver;
+
+    // Reward token amount per second
+    // Manually set by owner
+    // e.g.
+    // Set to 100esLBR/s ------------------- Set to 200esLBR/s ------------------>>
+    //                       (speed 100)                          (speed 200)
+    //
     uint256 public tokensPerInterval;
 
+    // Timestamp of last "distribution"
+    // Distribution means the receiver calls "distribute" function to take the reward
     uint256 public lastDistributionTime;
-
-    address public rewardManager;
-
-    address public rewardReceiver;
 
     event RewardManagerChanged(address newManager);
     event RewardReceiverChanged(address newReceiver);
@@ -53,13 +61,19 @@ contract RewardDistributor is OwnableUpgradeable {
     event RewardSpeedUpdated(uint256 tokensPerInterval);
     event RewardDistributed(uint256 amount);
 
-    function initialize(address _receiver, address _manager) public initializer {
+    function initialize(address _rewardToken, address _receiver, address _manager) public initializer {
         __Ownable_init();
 
+        rewardToken = _rewardToken;
         rewardReceiver = _receiver;
         rewardManager = _manager;
     }
 
+    /**
+     * @notice Get pending reward
+     *         This is the reward amount pending to be distributed to receiver contract
+     *         Only depends on the speed and time passed
+     */
     function pendingReward() public view returns (uint256) {
         if (block.timestamp == lastDistributionTime) return 0;
 
@@ -82,9 +96,15 @@ contract RewardDistributor is OwnableUpgradeable {
         emit LastDistributionTimeUpdated(lastDistributionTime);
     }
 
+    /**
+     * @notice Change the reward distribution speed
+     */
     function setTokensPerInterval(uint256 _tokensPerInterval) external onlyOwner {
         require(lastDistributionTime > 0, "Not started");
 
+        // When changing reward speed, will first calculate and update reward for the receiver
+        // Inside this call to receiver contract, it will call back to this contract's "distribute" function
+        // and update the last distribution time.
         IRewardReceiver(rewardReceiver).updateReward();
 
         tokensPerInterval = _tokensPerInterval;
@@ -100,6 +120,7 @@ contract RewardDistributor is OwnableUpgradeable {
 
         lastDistributionTime = block.timestamp;
 
+        // Distribute all reward token if balance is not enough
         uint256 balance = IERC20(rewardToken).balanceOf(address(this));
         if (balance < amountToDistribute) amountToDistribute = balance;
 
@@ -107,6 +128,7 @@ contract RewardDistributor is OwnableUpgradeable {
 
         emit RewardDistributed(amountToDistribute);
 
+        // Will always return the actual amount the receiver received
         return amountToDistribute;
     }
 
