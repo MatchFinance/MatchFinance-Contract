@@ -117,7 +117,6 @@ contract MatchPool is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradea
         address mintPoolAddress;
         bool isRebasePool;
         uint256 tokenPrice;
-        IERC20 asset;
     }
 
     // !! @modify Code added by Eric 20231030
@@ -598,9 +597,8 @@ contract MatchPool is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradea
             // Amount of LSD required to back borrow
             uint256 requiredLSD = (borrowInfo.principal * collateralRatioIdeal / maxBorrowRatio) 
                 * 1e18 / poolInfo.tokenPrice;
-            withdrawable = requiredLSD > supplied[poolInfo.mintPoolAddress][msg.sender]
-                ? 0 
-                : supplied[poolInfo.mintPoolAddress][msg.sender] - requiredLSD;
+            if (requiredLSD < supplied[poolInfo.mintPoolAddress][msg.sender])
+                withdrawable = supplied[poolInfo.mintPoolAddress][msg.sender] - requiredLSD;
         } 
         else withdrawable = supplied[poolInfo.mintPoolAddress][msg.sender];
 
@@ -631,8 +629,7 @@ contract MatchPool is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradea
             suppliedReward[poolInfo.mintPoolAddress][msg.sender] = newSuppliedReward;
         }
 
-        poolInfo.asset = IERC20(poolInfo.mintPool.getAsset());
-        address treasury = rewardManager.treasury();
+        IERC20 asset = IERC20(poolInfo.mintPool.getAsset());
         uint256 punishment;
         // Withdraw additional LSD from Lybra vault if contract does not have enough idle LSD
         if (idleAmount < amountWithInterest) {
@@ -663,8 +660,9 @@ contract MatchPool is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradea
             _withdrawFromLybra(poolInfo.mintPoolAddress, withdrawFromLybra);
         }
 
-        poolInfo.asset.safeTransfer(treasury, interestLSD);
-        poolInfo.asset.safeTransfer(msg.sender, _amount - punishment);
+        if (interestLSD > 0) 
+            asset.safeTransfer(rewardManager.treasury(), interestLSD);
+        asset.safeTransfer(msg.sender, _amount - punishment);
         borrowInfo.accInterest = 0;
 
         emit LSDWithdrew(
