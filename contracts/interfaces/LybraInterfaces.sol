@@ -58,6 +58,8 @@ interface IConfigurator {
     function eUSDMiningIncentives() external view returns (address);
 
     function getProtocolRewardsPool() external view returns (address);
+
+    function vaultMintFeeApy(address pool) external view returns(uint256);
 }
 
 // eUSD mining incentive, dlp stake reward pool
