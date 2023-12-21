@@ -20,6 +20,22 @@ export const clearAddressList = function () {
   fs.writeFileSync("info/address.json", JSON.stringify(emptyList, null, "\t"));
 };
 
+export const readMTokenAddressList = function () {
+  return JSON.parse(fs.readFileSync("info/mTokenAddress.json", "utf-8"));
+};
+
+export const storeMTokenAddressList = function (addressList: object) {
+  fs.writeFileSync("info/mTokenAddress.json", JSON.stringify(addressList, null, "\t"));
+};
+
+export const readMTokenImplList = function () {
+  return JSON.parse(fs.readFileSync("info/mTokenImpl.json", "utf-8"));
+};
+
+export const storeMTokenImplList = function (addressList: object) {
+  fs.writeFileSync("info/mTokenImpl.json", JSON.stringify(addressList, null, "\t"));
+};
+
 ///
 /// Deployment args record
 ///

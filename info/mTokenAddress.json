@@ -1,0 +1,10 @@
+{
+	"mainnet": {
+        "ProxyAdmin": "0x814133D9AfD0FFafA910Cbd41144faf126Bf0C5D",
+		"mesLBR": "0x0aF0E83D064f160376303ac67DD9A7971AF88d4C"
+	},
+	"sepolia": {},
+	"localhost": {
+		"mesLBR": "0x5A3Deb79F213F5d4C2702fC75eDfa41F46B5E271"
+	}
+}

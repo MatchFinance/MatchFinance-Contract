@@ -508,6 +508,8 @@ contract RewardManager is Initializable, OwnableUpgradeable, ReentrancyGuardUpgr
         // Mint boost reward mesLBR to reward distributor
         mesLBR.mint(rewardDistributors[address(mesLBR)], _boostReward);
 
+        // Distribute treasury part to distributors, for vlMatch staking
+
         // Transfer stablecoin protocol revenue to reward distributor
         address peUSD = lybraConfigurator.peUSD();
         address altStablecoin = lybraConfigurator.stableToken();

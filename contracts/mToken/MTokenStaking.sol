@@ -135,7 +135,7 @@ contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         UserInfo memory user = users[_user];
 
         uint256 newAccBoostReward = accBoostRewardPerMToken + (newPendingBoostReward * SCALE) / totalStaked;
-        uint256 newAccProtocolRevenue = accProtocolRevenuePerMToken + (newPendingProtocolIncome * SCALE) / totalStaked;
+        uint256 newAccProtocolRevenue = accProtocolRevenuePerMToken + (newPendingProtocolRevenue * SCALE) / totalStaked;
 
         uint256 pendingBoostReward = (user.stakedAmount * newAccBoostReward) / SCALE - user.boostRewardDebt;
         uint256 pendingProtocolRevenue = (user.stakedAmount * newAccProtocolRevenue) / SCALE - user.protocolRevenueDebt;

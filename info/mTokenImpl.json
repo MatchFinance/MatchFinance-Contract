@@ -1,0 +1,7 @@
+{
+	"mainnet": {
+		"mesLBR": "0x0D89818e8Cfb2bCD0203Cbd450D8ea6bE013c6C2"
+	},
+	"sepolia": {},
+	"localhost": {}
+}

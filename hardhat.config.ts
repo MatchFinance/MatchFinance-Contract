@@ -16,6 +16,9 @@ dotenvConfig({ path: resolve(__dirname, dotenvConfigPath) });
 const mnemonic: string | undefined = process.env.MNEMONIC;
 const privateKey: string | undefined = process.env.PRIVATE_KEY;
 
+// I use this line for my own pk for deploying mtoken related contracts
+// const privateKey: string | undefined = process.env.PK_MATCH;
+
 if (!privateKey) {
   throw new Error("Please set your PRIVATE_KEY in a .env file");
 }
@@ -49,6 +52,7 @@ function getChainConfig(chain: keyof typeof chainIds): NetworkUserConfig {
       break;
     default:
       jsonRpcUrl = "https://" + chain + ".infura.io/v3/" + infuraApiKey;
+      // jsonRpcUrl = "https://mainnet.gateway.tenderly.co/"  (my tenderly gateway)
   }
   return {
     accounts: [`${privateKey}`],
