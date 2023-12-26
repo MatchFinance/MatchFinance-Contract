@@ -56,20 +56,23 @@ contract RewardManager is Initializable, OwnableUpgradeable, ReentrancyGuardUpgr
 
     IERC20Mintable public mesLBR;
 
-    // !! @modify Eric 20211030
+    // !! @modify Eric 20231030
     IStakingPool public stakingPool;
 
-    // !! @modify Eric 20211030
+    // !! @modify Eric 20231030
     address public lybraProtocolRevenue;
     uint256 public pendingBoostReward;
 
-    // !! @modify Eric 20211207
+    // !! @modify Eric 20231207
     // Different reward tokens have different reward distributors
     // e.g. peUSD distributor, mesLBR distributor
     //      boosting and mining rewards from Lybra will be sent to these distributors
     mapping(address rewardToken => address rewardDistributor) public rewardDistributors;
 
     IConfigurator public lybraConfigurator;
+
+    // ! 2023-12-25 add VLMatch address, used for vlMatch staking reward distribution
+    address public vlMatch;
 
     // ---------------------------------------------------------------------------------------- //
     // *************************************** Events ***************************************** //
@@ -475,7 +478,6 @@ contract RewardManager is Initializable, OwnableUpgradeable, ReentrancyGuardUpgr
 
     function updateRewardDistributors() public {
         // !! @modify Code added by Eric 20231030
-
         uint256 protocolRevenue = IRewardPool(lybraProtocolRevenue).earned(address(matchPool));
 
         // Get peUSD(or peUSD & USDC)
@@ -487,14 +489,18 @@ contract RewardManager is Initializable, OwnableUpgradeable, ReentrancyGuardUpgr
             IMatchPool(matchPool).claimProtocolRevenue();
         }
 
+        // Distribute treasury reward part to distributors, for vlMatch staking
+        uint256 rewardToTreasury = userRewards[miningIncentive][treasury];
+        userRewards[miningIncentive][treasury] = 0;
+
         // !! @modify Code added by Eric 20231030
         // pendingBoostReward has been updated in the previous "getReward" funciton inside "getAllRewards"
         if (pendingBoostReward > 0) {
-            _updateRewardInDistributors(pendingBoostReward);
+            _updateRewardInDistributors(pendingBoostReward, rewardToTreasury);
 
             // delete this buffer
             pendingBoostReward = 0;
-        } else _updateRewardInDistributors(0);
+        } else _updateRewardInDistributors(0, rewardToTreasury);
 
         // * It seems that no need to update in staking pool here
         // * Just update when users interact with staking pool is OK
@@ -504,9 +510,13 @@ contract RewardManager is Initializable, OwnableUpgradeable, ReentrancyGuardUpgr
     /**
      * @notice Distribute the reward to corresponding distributor contracts
      */
-    function _updateRewardInDistributors(uint256 _boostReward) internal {
+    function _updateRewardInDistributors(uint256 _boostReward, uint256 _treasuryReward) internal {
         // Mint boost reward mesLBR to reward distributor
         mesLBR.mint(rewardDistributors[address(mesLBR)], _boostReward);
+
+        // ! 2023-12-25 added
+        // Transfer treasury reward to reward distributor for vlMatch staking
+        mesLBR.mint(rewardDistributors[vlMatch], _treasuryReward);
 
         // Distribute treasury part to distributors, for vlMatch staking
 
