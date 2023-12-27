@@ -480,7 +480,7 @@ contract MatchPool is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradea
     // Stake LBR-ETH LP token
     function stakeLP(uint256 _amount) external {
         if (stakePaused) revert StakePaused();
-        if (getLpValue(totalStaked + _amount) > stakeLimit && stakeLimit != 0)
+        if (stakeLimit != 0 && getLpValue(totalStaked + _amount) > stakeLimit)
             revert ExceedLimit();
 
         rewardManager.dlpUpdateReward(msg.sender);
@@ -525,8 +525,8 @@ contract MatchPool is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradea
 
         uint256 amount = depositHelpers[mintPoolAddress].toLSD{ value: msg.value }();
         if (
-            ((totalSupplied[mintPoolAddress] + amount) * mintPool.getAssetPrice()) /
-                1e18 > supplyLimit && supplyLimit != 0
+            supplyLimit != 0 && ((totalSupplied[mintPoolAddress] + amount) * 
+                mintPool.getAssetPrice()) / 1e18 > supplyLimit
         ) revert ExceedLimit();
 
         // Only non-rebase pools have to update interest before changing supply amounts
@@ -556,8 +556,8 @@ contract MatchPool is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradea
         address mintPoolAddress = address(mintPool);
 
         if (
-            ((totalSupplied[mintPoolAddress] + _amount) * mintPool.getAssetPrice()) /
-                1e18 > supplyLimit && supplyLimit != 0
+            supplyLimit != 0 && ((totalSupplied[mintPoolAddress] + _amount) * 
+                mintPool.getAssetPrice()) / 1e18 > supplyLimit
         ) revert ExceedLimit();
 
         // Only non-rebase pools have to update interest before changing supply amounts
