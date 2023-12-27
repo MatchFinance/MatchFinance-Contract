@@ -11,7 +11,8 @@ interface IRewardReceiver {
 }
 
 /**
- * @notice Reward Distributor for mToken staking
+ * @notice Reward Distributor 
+ *         for mToken staking / vlMatch staking
  *
  * @dev
  *      Reward token type: mesLBR and peUSD(or USDC)
@@ -19,16 +20,21 @@ interface IRewardReceiver {
  *      2) peUSD comes from MatchPool holding esLBR
  *
  *      Workflow for reward distribution:
- *      1) Reward manager calls "boostReward" to get boosting reward from Lybra (extra esLBR)
- *      2) Every time MatchPool contract claims esLBR & peUSD from Lybra, it will
- *         distribute the boosting part and protocol revenue part to this contract
- *      3) MTokenStaking contract needs to call "distriubte" to distribute the reward
+ *      1) Owner calls the "boostReward" function inside MatchPool contract
+ *      2) Every time when users stake dLP or LSD, the updating function will get boost reward amount
+ *      3) Every time when users call "getReward" in RewardManager contract, it will distribute
+ *         the boosting part and protocol revenue part to the correspongding distributor contract
+ *         (different reward token and receiver has different distributors)
+ *      4) MTokenStaking & VLMatchStaking contract needs to call "distriubte" to distribute the reward
+ *         (maybe more receivers in the future)
  *
  *      For multiple reward tokens to be distributed to mToken stakers, we need to
  *      deploy multiple RewardDistributor contracts.
  *
  *      esLBR: Lybra -> MatchPool -> RewardDistributor -> MTokenStaking
+ *                                                     -> VLMatchStaking
  *      peUSD: Lybra -> MatchPool -> RewardDistributor -> MTokenStaking
+ *      altStablecoin: Lybra -> MatchPool -> RewardDistributor -> MTokenStaking
  */
 
 contract RewardDistributor is OwnableUpgradeable {
@@ -39,9 +45,12 @@ contract RewardDistributor is OwnableUpgradeable {
     // Reward token address
     // Each reward token has a distributor
     address public rewardToken;
+    
+    // Manager is the only caller to distribute the reward
+    address public manager;
 
-    address public rewardManager;
-    address public rewardReceiver;
+    // Receiver is the only one who can receive the reward
+    address public receiver;
 
     // Reward token amount per second
     // Manually set by owner
@@ -49,24 +58,24 @@ contract RewardDistributor is OwnableUpgradeable {
     // Set to 100esLBR/s ------------------- Set to 200esLBR/s ------------------>>
     //                       (speed 100)                          (speed 200)
     //
-    uint256 public tokensPerInterval;
+    uint256 public speed;
 
     // Timestamp of last "distribution"
     // Distribution means the receiver calls "distribute" function to take the reward
     uint256 public lastDistributionTime;
 
-    event RewardManagerChanged(address newManager);
-    event RewardReceiverChanged(address newReceiver);
+    event ManagerChanged(address newManager);
+    event ReceiverChanged(address newReceiver);
     event LastDistributionTimeUpdated(uint256 lastDistributionTime);
-    event RewardSpeedUpdated(uint256 tokensPerInterval);
+    event RewardSpeedUpdated(uint256 newSpeed);
     event RewardDistributed(uint256 amount);
 
     function initialize(address _rewardToken, address _receiver, address _manager) public initializer {
         __Ownable_init();
 
         rewardToken = _rewardToken;
-        rewardReceiver = _receiver;
-        rewardManager = _manager;
+        receiver = _receiver;
+        manager = _manager;
     }
 
     /**
@@ -77,17 +86,17 @@ contract RewardDistributor is OwnableUpgradeable {
     function pendingReward() public view returns (uint256) {
         if (block.timestamp == lastDistributionTime) return 0;
 
-        return (block.timestamp - lastDistributionTime) * tokensPerInterval;
+        return (block.timestamp - lastDistributionTime) * speed;
     }
 
-    function setRewardReceiver(address _receiver) external onlyOwner {
-        rewardReceiver = _receiver;
-        emit RewardReceiverChanged(_receiver);
+    function setReceiver(address _receiver) external onlyOwner {
+        receiver = _receiver;
+        emit ReceiverChanged(_receiver);
     }
 
-    function setRewardManager(address _manager) external onlyOwner {
-        rewardManager = _manager;
-        emit RewardManagerChanged(_manager);
+    function setManager(address _manager) external onlyOwner {
+        manager = _manager;
+        emit ManagerChanged(_manager);
     }
 
     function updateLastDistributionTime() external onlyOwner {
@@ -99,21 +108,21 @@ contract RewardDistributor is OwnableUpgradeable {
     /**
      * @notice Change the reward distribution speed
      */
-    function setTokensPerInterval(uint256 _tokensPerInterval) external onlyOwner {
+    function setRewardSpeed(uint256 _newSpeed) external onlyOwner {
         require(lastDistributionTime > 0, "Not started");
 
         // When changing reward speed, will first calculate and update reward for the receiver
         // Inside this call to receiver contract, it will call back to this contract's "distribute" function
         // and update the last distribution time.
-        IRewardReceiver(rewardReceiver).updateReward();
+        IRewardReceiver(receiver).updateReward();
 
-        tokensPerInterval = _tokensPerInterval;
+        speed = _newSpeed;
 
-        emit RewardSpeedUpdated(_tokensPerInterval);
+        emit RewardSpeedUpdated(_newSpeed);
     }
 
     function distribute() external returns (uint256) {
-        require(msg.sender == rewardManager, "Only reward manager can distribute");
+        require(msg.sender == manager, "Only manager can distribute");
 
         uint256 amountToDistribute = pendingReward();
         if (amountToDistribute == 0) return 0;
@@ -124,7 +133,7 @@ contract RewardDistributor is OwnableUpgradeable {
         uint256 balance = IERC20(rewardToken).balanceOf(address(this));
         if (balance < amountToDistribute) amountToDistribute = balance;
 
-        IERC20(rewardToken).safeTransfer(rewardReceiver, amountToDistribute);
+        IERC20(rewardToken).safeTransfer(receiver, amountToDistribute);
 
         emit RewardDistributed(amountToDistribute);
 

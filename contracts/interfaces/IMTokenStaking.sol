@@ -2,7 +2,6 @@
 
 pragma solidity ^0.8.19;
 
-interface IStakingPool {
-    function updateReward() external;
+interface IMTokenStaking {
     function delegateStake(address _to, uint256 _amount) external;
 }
