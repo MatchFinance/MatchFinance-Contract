@@ -21,7 +21,15 @@ import { IRewardManager } from "../interfaces/IRewardManager.sol";
 contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     using SafeERC20 for IERC20;
 
+    // ---------------------------------------------------------------------------------------- //
+    // ************************************* Constants **************************************** //
+    // ---------------------------------------------------------------------------------------- //
+
     uint256 public constant SCALE = 1e18;
+
+    // ---------------------------------------------------------------------------------------- //
+    // ************************************* Variables **************************************** //
+    // ---------------------------------------------------------------------------------------- //
 
     // mesLBR token
     IERC20 public mToken;
@@ -54,6 +62,10 @@ contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     }
     mapping(address user => UserInfo info) public users;
 
+    // ---------------------------------------------------------------------------------------- //
+    // *************************************** Events ***************************************** //
+    // ---------------------------------------------------------------------------------------- //
+
     event RewardManagerChanged(address newManager);
     event mTokenChanged(address newMToken);
     event peUSDChanged(address peUSD);
@@ -64,10 +76,18 @@ contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     event Compound(address indexed user, uint256 boostReward, uint256 protocolRevenue);
     event EmergencyWithdraw(address token, uint256 amount);
 
+    // ---------------------------------------------------------------------------------------- //
+    // *************************************** Errors ***************************************** //
+    // ---------------------------------------------------------------------------------------- //
+
     error InsufficientStakedAmount();
     error InsufficientStableReward();
     error ZeroAmount();
     error NotRewardManager();
+
+    // ---------------------------------------------------------------------------------------- //
+    // ************************************ Initializer *************************************** //
+    // ---------------------------------------------------------------------------------------- //
 
     function initialize(address _rewardManager, address _mToken, address _peUSD) public initializer {
         __Ownable_init();
@@ -78,11 +98,18 @@ contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         peUSD = IERC20(_peUSD);
     }
 
+    // ---------------------------------------------------------------------------------------- //
+    // ************************************* Modifiers **************************************** //
+    // ---------------------------------------------------------------------------------------- //
+
     modifier onlyRewardManager() {
         if (msg.sender != rewardManager) revert NotRewardManager();
         _;
     }
 
+    // ---------------------------------------------------------------------------------------- //
+    // ************************************ Set Functions ************************************* //
+    // ---------------------------------------------------------------------------------------- //
     function setRewardManager(address _rewardManager) external onlyOwner {
         rewardManager = _rewardManager;
         emit RewardManagerChanged(_rewardManager);
@@ -102,6 +129,10 @@ contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         altStableRewardToken = IERC20(_altStableRewardToken);
         emit AltStableRewardChanged(_altStableRewardToken);
     }
+
+    // ---------------------------------------------------------------------------------------- //
+    // *********************************** Main Functions ************************************* //
+    // ---------------------------------------------------------------------------------------- //
 
     function stake(uint256 _amount) external nonReentrant {
         _stake(_amount, msg.sender, false);
@@ -222,6 +253,15 @@ contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         emit RewardUpdated(totalBoostReward, totalProtocolRevenue);
     }
 
+    function emergencyWithdraw(address _token, uint256 _amount) external onlyOwner {
+        IERC20(_token).safeTransfer(msg.sender, _amount);
+        emit EmergencyWithdraw(_token, _amount);
+    }
+
+    // ---------------------------------------------------------------------------------------- //
+    // ********************************* Internal Functions *********************************** //
+    // ---------------------------------------------------------------------------------------- //
+
     function _stake(uint256 _amount, address _user, bool _isCompound) internal {
         if (_amount == 0) revert ZeroAmount();
 
@@ -289,11 +329,6 @@ contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     function _updateUserDebt(address _user) internal {
         users[_user].boostRewardDebt = (users[_user].stakedAmount * accBoostRewardPerMToken) / SCALE;
         users[_user].protocolRevenueDebt = (users[_user].stakedAmount * accProtocolRevenuePerMToken) / SCALE;
-    }
-
-    function emergencyWithdraw(address _token, uint256 _amount) external onlyOwner {
-        IERC20(_token).safeTransfer(msg.sender, _amount);
-        emit EmergencyWithdraw(_token, _amount);
     }
 
     function _distributeStableReward(address _to, uint256 _amount) internal {

@@ -44,9 +44,4 @@ contract MToken is ERC20Upgradeable, OwnableUpgradeable {
         require(isMinter[msg.sender], "MToken: only minter can mint");
         _mint(_to, _amount);
     }
-
-    function burn(address _from, uint256 _amount) external {
-        require(isMinter[msg.sender], "MToken: only minter can burn");
-        _burn(_from, _amount);
-    }
 }

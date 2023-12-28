@@ -11,7 +11,7 @@ interface IRewardReceiver {
 }
 
 /**
- * @notice Reward Distributor 
+ * @notice Reward Distributor
  *         for mToken staking / vlMatch staking
  *
  * @dev
@@ -35,17 +35,32 @@ interface IRewardReceiver {
  *                                                     -> VLMatchStaking
  *      peUSD: Lybra -> MatchPool -> RewardDistributor -> MTokenStaking
  *      altStablecoin: Lybra -> MatchPool -> RewardDistributor -> MTokenStaking
+ *
+ *      ! 2023-12-28 Note for deployment
+ *      ! We will deploy four RewardDistributors:
+ *      ! 1) distributing mesLBR to mesLBR staking
+ *      ! 2) distributing peUSD to mesLBR staking
+ *      ! 3) distributing altStablecoin to mesLBR staking
+ *      ! 4) distributing mesLBR to vlMatch staking
  */
 
 contract RewardDistributor is OwnableUpgradeable {
     using SafeERC20 for IERC20;
 
+    // ---------------------------------------------------------------------------------------- //
+    // ************************************* Constants **************************************** //
+    // ---------------------------------------------------------------------------------------- //
+
     uint256 public constant SCALE = 1e18;
+
+    // ---------------------------------------------------------------------------------------- //
+    // ************************************* Variables **************************************** //
+    // ---------------------------------------------------------------------------------------- //
 
     // Reward token address
     // Each reward token has a distributor
     address public rewardToken;
-    
+
     // Manager is the only caller to distribute the reward
     address public manager;
 
@@ -64,11 +79,17 @@ contract RewardDistributor is OwnableUpgradeable {
     // Distribution means the receiver calls "distribute" function to take the reward
     uint256 public lastDistributionTime;
 
-    event ManagerChanged(address newManager);
-    event ReceiverChanged(address newReceiver);
-    event LastDistributionTimeUpdated(uint256 lastDistributionTime);
+    // ---------------------------------------------------------------------------------------- //
+    // *************************************** Events ***************************************** //
+    // ---------------------------------------------------------------------------------------- //
+
+    event LastDistributionTimeUpdated();
     event RewardSpeedUpdated(uint256 newSpeed);
     event RewardDistributed(uint256 amount);
+
+    // ---------------------------------------------------------------------------------------- //
+    // ************************************* Initialize *************************************** //
+    // ---------------------------------------------------------------------------------------- //
 
     function initialize(address _rewardToken, address _receiver, address _manager) public initializer {
         __Ownable_init();
@@ -77,6 +98,10 @@ contract RewardDistributor is OwnableUpgradeable {
         receiver = _receiver;
         manager = _manager;
     }
+
+    // ---------------------------------------------------------------------------------------- //
+    // ************************************ View Functions ************************************ //
+    // ---------------------------------------------------------------------------------------- //
 
     /**
      * @notice Get pending reward
@@ -89,41 +114,39 @@ contract RewardDistributor is OwnableUpgradeable {
         return (block.timestamp - lastDistributionTime) * speed;
     }
 
-    function setReceiver(address _receiver) external onlyOwner {
-        receiver = _receiver;
-        emit ReceiverChanged(_receiver);
-    }
-
-    function setManager(address _manager) external onlyOwner {
-        manager = _manager;
-        emit ManagerChanged(_manager);
-    }
-
-    function updateLastDistributionTime() external onlyOwner {
-        lastDistributionTime = block.timestamp;
-
-        emit LastDistributionTimeUpdated(lastDistributionTime);
-    }
+    // ---------------------------------------------------------------------------------------- //
+    // ************************************ Set Functions ************************************* //
+    // ---------------------------------------------------------------------------------------- //
 
     /**
      * @notice Change the reward distribution speed
      */
     function setRewardSpeed(uint256 _newSpeed) external onlyOwner {
-        require(lastDistributionTime > 0, "Not started");
+        // If this is the first time to set speed, will start this distributor
+        // If already started, need to first distribute rewards out before changing speed
+        if (lastDistributionTime != 0) {
+            // When changing reward speed, will first calculate and update reward for the receiver
+            // Inside this call to receiver contract, it will call back to this contract's "distribute" function
+            // and update the last distribution time.
+            // This --> call receiver "updateReward" --> call rewardManager --> call this "distribute"
+            IRewardReceiver(receiver).updateReward();
+        }
 
-        // When changing reward speed, will first calculate and update reward for the receiver
-        // Inside this call to receiver contract, it will call back to this contract's "distribute" function
-        // and update the last distribution time.
-        IRewardReceiver(receiver).updateReward();
-
+        lastDistributionTime = block.timestamp;
         speed = _newSpeed;
 
         emit RewardSpeedUpdated(_newSpeed);
+        emit LastDistributionTimeUpdated();
     }
+
+    // ---------------------------------------------------------------------------------------- //
+    // ************************************ Main Functions ************************************ //
+    // ---------------------------------------------------------------------------------------- //
 
     function distribute() external returns (uint256) {
         require(msg.sender == manager, "Only manager can distribute");
 
+        // The amount to distribute is only timePassed * speed
         uint256 amountToDistribute = pendingReward();
         if (amountToDistribute == 0) return 0;
 
@@ -136,6 +159,7 @@ contract RewardDistributor is OwnableUpgradeable {
         IERC20(rewardToken).safeTransfer(receiver, amountToDistribute);
 
         emit RewardDistributed(amountToDistribute);
+        emit LastDistributionTimeUpdated();
 
         // Will always return the actual amount the receiver received
         return amountToDistribute;
