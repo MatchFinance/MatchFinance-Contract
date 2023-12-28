@@ -946,17 +946,11 @@ contract MatchPool is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradea
         }
     }
 
-    // !! @modify Code added by Eric 20231030
+    // !! @modify Code added by Eric 20231228
+    // !!         Remove access control
     function claimProtocolRevenue() external {
-        require(msg.sender == address(rewardManager));
-
         IRewardPool(lybraProtocolRevenue).getReward();
 
-        // TODO: use balanceOf.address(this) or lybraProtocolRevenue.earned() ???
-        // Still not decided
-        // if use "earned()" to get precise amount, need to calcualte how many peUSD received
-        // and then get if & how any USDC received
-        // and then send them all to distributor
         IERC20 peUSD = IERC20(lybraConfigurator.peUSD());
         peUSD.transfer(msg.sender, peUSD.balanceOf(address(this)));
 
