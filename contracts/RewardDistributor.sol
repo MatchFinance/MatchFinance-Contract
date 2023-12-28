@@ -11,8 +11,10 @@ interface IRewardReceiver {
 }
 
 /**
- * @notice Reward Distributor
- *         for mToken staking / vlMatch staking
+ * @title Reward Distributor (distributing rewards on Match Finance)
+ * @author Eric Lee (ylikp.ust@gmail.com)
+ *
+ * @notice Distribute reward for mToken staking / vlMatch staking
  *
  * @dev
  *      Reward token type: mesLBR and peUSD(or USDC)

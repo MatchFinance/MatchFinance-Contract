@@ -12,11 +12,12 @@ import { IRewardManager } from "../interfaces/IRewardManager.sol";
 
 /**
  * @title MTokenStaking (staking mesLBR on Match Finance)
- * @author Eric Lee
+ * @author Eric Lee (ylikp.ust@gmail.com)
  *
- * @notice
- *         Reward manager records the "extra boost reward" for each user
- *         Every time user stake/unstake, the reward manager will update the reward
+ * @notice Users can stake mesLBR inside this contract to get:
+ *         1) 100% boosting reward from Lybra (more mesLBR)
+ *         2) 100% protocol revenue from Lybra (peUSD / altStablecoin)
+ *         
  */
 contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     using SafeERC20 for IERC20;
@@ -44,9 +45,9 @@ contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     // All reward calculation and fetching are done by reward manager
     address public rewardManager;
 
-    // Total esLBR and USDC to be distributed
+    // Total esLBR and protocol revenue (ever received)
     uint256 public totalBoostReward;
-    uint256 public totalProtocolRevenue;
+    uint256 public totalProtocolRevenue; // Include both peUSD and altStablecoin
 
     // Accumulated reward per staked mesLBR
     uint256 public accBoostRewardPerMToken;
@@ -331,6 +332,10 @@ contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         users[_user].protocolRevenueDebt = (users[_user].stakedAmount * accProtocolRevenuePerMToken) / SCALE;
     }
 
+    // Distribute stablecoin reward to user
+    // If peUSD is enough, distribute peUSD
+    // If peUSD is not enough, distribute altStablecoin
+    // If peUSD + altStablecoin is not enough, revert
     function _distributeStableReward(address _to, uint256 _amount) internal {
         uint256 peUSDBalance = peUSD.balanceOf(address(this));
 

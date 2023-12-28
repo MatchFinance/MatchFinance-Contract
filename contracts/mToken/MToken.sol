@@ -7,28 +7,50 @@ import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/O
 
 /**
  * @title MToken (mesLBR for Match Finance)
- * @author Eric Lee
- * @notice mesLBR represents user's share on Match Finance
+ * @author Eric Lee (ylikp.ust@gmail.com)
+ *
+ * @notice mesLBR represents user's shares on Match Finance
  *         mesLBR is a ERC20 token
  *
- *         it can be got from:
- *         1)
+ *         ! It is the transferrable version of "esLBR" (from Lybra)
+ *         ! esLBR is designed to be not transferrable
+ *         ! and Match Finance give it liquidity by transferring to mesLBR
  *
+ *         It can be got from:
+ *         1) Supply dLP / LSD assets on Match Finance
+ *         2) Stake mesLBR
+ *         3) Stake vlMatch (vlMatch is a special form of Match token)
  *
  *         it can be used to:
- *         1)
+ *         1) Stake inside "mesLBRStaking" to get more mesLBR
+ *         2) Stake inside "mesLBRStaking" to share protocol revenue from Lybra
  */
 
 contract MToken is ERC20Upgradeable, OwnableUpgradeable {
+    // ---------------------------------------------------------------------------------------- //
+    // ************************************* Variables **************************************** //
+    // ---------------------------------------------------------------------------------------- //
     mapping(address account => bool isValidMinter) public isMinter;
+
+    // ---------------------------------------------------------------------------------------- //
+    // ************************************** Events ****************************************** //
+    // ---------------------------------------------------------------------------------------- //
 
     event MinterAdded(address minter);
     event MinterRemoved(address minter);
+
+    // ---------------------------------------------------------------------------------------- //
+    // ************************************ Initializer *************************************** //
+    // ---------------------------------------------------------------------------------------- //
 
     function initialize(string memory name_, string memory symbol_) external initializer {
         __ERC20_init(name_, symbol_);
         __Ownable_init();
     }
+
+    // ---------------------------------------------------------------------------------------- //
+    // ************************************ Set Functions ************************************* //
+    // ---------------------------------------------------------------------------------------- //
 
     function addMinter(address _minter) external onlyOwner {
         isMinter[_minter] = true;
@@ -39,6 +61,10 @@ contract MToken is ERC20Upgradeable, OwnableUpgradeable {
         isMinter[_minter] = false;
         emit MinterRemoved(_minter);
     }
+
+    // ---------------------------------------------------------------------------------------- //
+    // ********************************** Main Functions ************************************** //
+    // ---------------------------------------------------------------------------------------- //
 
     function mint(address _to, uint256 _amount) external {
         require(isMinter[msg.sender], "MToken: only minter can mint");
