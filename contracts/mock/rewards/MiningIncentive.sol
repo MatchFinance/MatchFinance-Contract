@@ -11,11 +11,12 @@ pragma solidity ^0.8.17;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
-import "../interfaces/LybraInterfaces.sol";
+import "../../interfaces/LybraInterfaces.sol";
 
 contract MiningIncentive is Ownable {
     IConfigurator public immutable configurator;
-    IMintPool public vault;
+    IMintPool[] public vaults;
+    IEUSD public esLBR;
 
     // Duration of rewards to be paid out (in seconds)
     uint256 public duration = 604_800;
@@ -24,7 +25,7 @@ contract MiningIncentive is Ownable {
     // Minimum of last updated time and reward finish time
     uint256 public updatedAt;
     // Reward to be paid out per second
-    uint256 public rewardRatio = 7e17;
+    uint256 public rewardRatio = 5e17;
     // Sum of (reward ratio * dt * 1e18 / total supply)
     uint256 public rewardPerTokenStored;
     // User address => rewardPerTokenStored
@@ -32,6 +33,7 @@ contract MiningIncentive is Ownable {
     // User address => rewards to be claimed
     mapping(address => uint256) public rewards;
     mapping(address => uint256) public userUpdatedAt;
+    uint256 public extraRatio = 10 * 1e18;
     uint256 public biddingFeeRatio = 3000;
     address public ethlbrStakePool;
     uint256 public minDlpRatio = 250;
@@ -39,17 +41,18 @@ contract MiningIncentive is Ownable {
     AggregatorV3Interface internal lbrPriceFeed;
     bool public isEUSDBuyoutAllowed = true;
 
-    event VaultChanged(address vaults, uint256 time);
+    event VaultsChanged(IMintPool[] vaults, uint256 time);
     event LpOracleChanged(address newOracle, uint256 time);
     event LBROracleChanged(address newOracle, uint256 time);
     event ClaimReward(address indexed user, uint256 amount, uint256 time);
     event ClaimedOtherEarnings(address indexed user, address indexed Victim, uint256 buyAmount, uint256 biddingFee, bool useEUSD, uint256 time);
     event NotifyRewardChanged(uint256 addAmount, uint256 time);
 
-    constructor(address _config, address _lpOracle, address _lbrOracle) {
+    constructor(address _config, address _lpOracle, address _lbrOracle, address _esLBR) {
         configurator = IConfigurator(_config);
         lpPriceFeed = AggregatorV3Interface(_lpOracle);
         lbrPriceFeed = AggregatorV3Interface(_lbrOracle);
+        esLBR = IEUSD(_esLBR);
     }
 
     modifier updateReward(address _account) {
@@ -75,9 +78,9 @@ contract MiningIncentive is Ownable {
     }
 
     // Set stETH mint vault
-    function setPool(address _vault) external onlyOwner {
-        vault = IMintPool(_vault);
-        emit VaultChanged(_vault, block.timestamp);
+    function setPools(IMintPool[] memory _vaults) external onlyOwner {
+        vaults = _vaults;
+        emit VaultsChanged(_vaults, block.timestamp);
     }
 
     function setBiddingCost(uint256 _biddingRatio) external onlyOwner {
@@ -110,14 +113,22 @@ contract MiningIncentive is Ownable {
      * weight (obtained from configurator.getVaultWeight()). 
      */
     function totalStaked() public view returns (uint256) {
-        return vault.getPoolTotalCirculation() * configurator.getVaultWeight(address(vault)) / 1e20;
+        uint256 amount;
+        for (uint i = 0; i < vaults.length; i++) {
+            amount += vaults[i].getPoolTotalCirculation() * configurator.getVaultWeight(address(vaults[i])) / 1e20;
+        }
+        return amount;
     }
 
     /**
      * @notice Returns the total amount of borrowed eUSD and peUSD by the user.
      */
     function stakedOf(address user) public view returns (uint256) {
-        return vault.getBorrowedOf(user) * configurator.getVaultWeight(address(vault)) / 1e20;
+        uint256 amount;
+        for (uint i = 0; i < vaults.length; i++) {
+            amount += vaults[i].getBorrowedOf(user) * configurator.getVaultWeight(address(vaults[i])) / 1e20;
+        }
+        return amount;
     }
 
     /**
@@ -147,8 +158,9 @@ contract MiningIncentive is Ownable {
      */
     function refreshReward(address _account) external updateReward(_account) {}
 
-    function getBoost(address _account) public pure returns (uint256) {
-        return 100 * 1e18;
+    function getBoost(address _account) public view returns (uint256) {
+        uint256 temp = userUpdatedAt[_account];
+        return 100 * 1e18 + (temp - temp);
     }
 
     function earned(address _account) public view returns (uint256) {
@@ -171,6 +183,7 @@ contract MiningIncentive is Ownable {
         uint256 reward = rewards[msg.sender];
         if (reward > 0) {
             rewards[msg.sender] = 0;
+            esLBR.mint(msg.sender, reward);
             emit ClaimReward(msg.sender, reward, block.timestamp);
         }
     }
@@ -212,29 +225,22 @@ contract MiningIncentive is Ownable {
     //     }
     // }
 
-    // function notifyRewardAmount(
-    //     uint256 amount
-    // ) external onlyOwner updateReward(address(0)) {
-    //     require(amount != 0, "amount = 0");
-    //     if (block.timestamp >= finishAt) {
-    //         rewardRatio = amount / duration;
-    //     } else {
-    //         uint256 remainingRewards = (finishAt - block.timestamp) * rewardRatio;
-    //         rewardRatio = (amount + remainingRewards) / duration;
-    //     }
+    function notifyRewardAmount(
+        uint256 amount
+    ) external onlyOwner updateReward(address(0)) {
+        require(amount != 0, "amount = 0");
+        if (block.timestamp >= finishAt) {
+            rewardRatio = amount / duration;
+        } else {
+            uint256 remainingRewards = (finishAt - block.timestamp) * rewardRatio;
+            rewardRatio = (amount + remainingRewards) / duration;
+        }
 
-    //     require(rewardRatio != 0, "reward ratio = 0");
+        require(rewardRatio != 0, "reward ratio = 0");
 
-    //     finishAt = block.timestamp + duration;
-    //     updatedAt = block.timestamp;
-    //     emit NotifyRewardChanged(amount, block.timestamp);
-    // }
-
-    // Reward amount for a week
-    function setRewardRatio(uint256 _amount) external onlyOwner updateReward(address(0)) {
-        rewardRatio = _amount / duration;
         finishAt = block.timestamp + duration;
         updatedAt = block.timestamp;
+        emit NotifyRewardChanged(amount, block.timestamp);
     }
 
     function getLBRPrice() external view returns (uint256) {

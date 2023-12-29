@@ -4,9 +4,13 @@ pragma solidity ^0.8.19;
 
 interface ILido {
     function submit(address _referral) external payable returns (uint256 StETH);
+    
+    function approve(address spender, uint256 amount) external returns (bool);
 }
 
 interface IWstETH {
+    function stEthPerToken() external view returns (uint256);
+    
     function wrap(uint256 _stETHAmount) external returns (uint256);
 }
 

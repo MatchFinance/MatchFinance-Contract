@@ -1,49 +1,45 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: BUSL-1.1
 
 pragma solidity ^0.8.17;
 
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
+import "../../interfaces/LybraInterfaces.sol";
+
 /**
  * @title Interest-bearing ERC20-like token for Lybra protocol.
  *
- * This contract is abstract. To make the contract deployable override the
- * `_getTotalMintedEUSD` function. `Lybra.sol` contract inherits EUSD and defines
- * the `_getTotalMintedEUSD` function.
- *
- * EUSD balances are dynamic and represent the holder's share in the total amount
+ * eUSD balances are dynamic and represent the holder's share in the total amount
  * of Ether controlled by the protocol. Account shares aren't normalized, so the
  * contract also stores the sum of all shares to calculate each account's token balance
  * which equals to:
  *
- *   shares[account] * _getTotalMintedEUSD() / _getTotalShares()
+ *   shares[account] * totalSupply / _totalShares
  *
  * For example, assume that we have:
  *
- *   _getTotalMintedEUSD() -> 1000 EUSD
+ *   _getTotalMintedEUSD() -> 1000 eUSD
  *   sharesOf(user1) -> 100
  *   sharesOf(user2) -> 400
  *
  * Therefore:
  *
- *   balanceOf(user1) -> 2 tokens which corresponds 200 EUSD
- *   balanceOf(user2) -> 8 tokens which corresponds 800 EUSD
+ *   balanceOf(user1) -> 200 tokens which corresponds 200 eUSD
+ *   balanceOf(user2) -> 800 tokens which corresponds 800 eUSD
  *
- * Since balances of all token holders change when the amount of total supplied EUSD
+ * Since balances of all token holders change when the amount of total shares
  * changes, this token cannot fully implement ERC20 standard: it only emits `Transfer`
  * events upon explicit transfer between holders. In contrast, when total amount of
  * pooled Ether increases, no `Transfer` events are generated: doing so would require
  * emitting an event for each token holder and thus running an unbounded loop.
  */
-contract stETHMock is IERC20 {
-    using SafeMath for uint256;
-    uint256 private totalShares;
-
-    uint256 totalEther;
-    uint256 updateTime;
+contract EUSDMock is IERC20, Context {
+    // IConfigurator public immutable configurator;
+    uint256 private _totalShares;
+    uint256 private _totalSupply;
 
     /**
-     * @dev EUSD balances are dynamic and are calculated based on the accounts' shares
+     * @dev eUSD balances are dynamic and are calculated based on the accounts' shares
      * and the total supply by the protocol. Account shares aren't
      * normalized, so the contract also stores the sum of all shares to calculate
      * each account's token balance which equals to:
@@ -62,70 +58,52 @@ contract stETHMock is IERC20 {
      *
      * @dev emitted in pair with an ERC20-defined `Transfer` event.
      */
-    event TransferShares(
-        address indexed from,
-        address indexed to,
-        uint256 sharesValue
-    );
+    event TransferShares(address indexed from, address indexed to, uint256 sharesValue);
 
     /**
      * @notice An executed `burnShares` request
      *
      * @dev Reports simultaneously burnt shares amount
-     * and corresponding EUSD amount.
-     * The EUSD amount is calculated twice: before and after the burning incurred rebase.
+     * and corresponding eUSD amount.
+     * The eUSD amount is calculated twice: before and after the burning incurred rebase.
      *
      * @param account holder of the burnt shares
-     * @param preRebaseTokenAmount amount of EUSD the burnt shares corresponded to before the burn
-     * @param postRebaseTokenAmount amount of EUSD the burnt shares corresponded to after the burn
+     * @param preRebaseTokenAmount amount of eUSD the burnt shares corresponded to before the burn
+     * @param postRebaseTokenAmount amount of eUSD the burnt shares corresponded to after the burn
      * @param sharesAmount amount of burnt shares
      */
-    event SharesBurnt(
-        address indexed account,
-        uint256 preRebaseTokenAmount,
-        uint256 postRebaseTokenAmount,
-        uint256 sharesAmount
-    );
+    event SharesBurnt(address indexed account, uint256 preRebaseTokenAmount, uint256 postRebaseTokenAmount, uint256 sharesAmount);
+
+    modifier onlyMintVault() {
+        // require(configurator.mintVault(msg.sender), "RCP");
+        _;
+    }
+    modifier mintEnabled() {
+        // require(!configurator.vaultMintPaused(msg.sender), "MPP");
+        _;
+    }
+    modifier burnEnabled() {
+        // require(!configurator.vaultBurnPaused(msg.sender), "BPP");
+        _;
+    }
 
     constructor() {
-        _mintShares(msg.sender, 10000 * 1e18);
-        totalEther = 10000 * 1e18;
-        updateTime = block.timestamp;
-    }
-
-    function submit(address user) external payable returns(uint256) {
-        uint256 sharesAmount = getSharesByPooledEth(msg.value);
-
-        _mintShares(msg.sender, sharesAmount);
-        totalEther = _getTotalMintedEUSD() + msg.value;
-        updateTime = block.timestamp;
-        return sharesAmount;
-    }
-
-    function claimTestStETH() external {
-        _mintShares(msg.sender, 100 * 1e18);
-    }
-
-    /**
-     * @dev mock stETH are expanding at a ratio of 1% a day
-     */
-    function _getTotalMintedEUSD() internal view returns (uint256) {
-        return totalEther + totalEther * (block.timestamp - updateTime) / 365 / 20 days ;
+        // configurator = IConfigurator(_config);
     }
 
     /**
      * @return the name of the token.
      */
-    function name() public pure virtual returns (string memory) {
-        return "stETH";
+    function name() public pure returns (string memory) {
+        return "eUSD";
     }
 
     /**
      * @return the symbol of the token, usually a shorter version of the
      * name.
      */
-    function symbol() public pure virtual returns (string memory) {
-        return "stETH";
+    function symbol() public pure returns (string memory) {
+        return "eUSD";
     }
 
     /**
@@ -136,13 +114,13 @@ contract stETHMock is IERC20 {
     }
 
     /**
-     * @return the amount of EUSD in existence.
+     * @return the amount of eUSD in existence.
      *
      * @dev Always equals to `_getTotalMintedEUSD()` since token amount
-     * is pegged to the total amount of EUSD controlled by the protocol.
+     * is pegged to the total amount of eUSD controlled by the protocol.
      */
     function totalSupply() public view returns (uint256) {
-        return _getTotalMintedEUSD();
+        return _totalSupply;
     }
 
     /**
@@ -152,7 +130,7 @@ contract stETHMock is IERC20 {
      * total Ether controlled by the protocol. See `sharesOf`.
      */
     function balanceOf(address _account) public view returns (uint256) {
-        return getPooledEthByShares(_sharesOf(_account));
+        return getMintedEUSDByShares(_sharesOf(_account));
     }
 
     /**
@@ -166,15 +144,12 @@ contract stETHMock is IERC20 {
      *
      * - `_recipient` cannot be the zero address.
      * - the caller must have a balance of at least `_amount`.
-     * - the contract must not be paused.
      *
      * @dev The `_amount` argument is the amount of tokens, not shares.
      */
-    function transfer(
-        address _recipient,
-        uint256 _amount
-    ) public returns (bool) {
-        _transfer(msg.sender, _recipient, _amount);
+    function transfer(address _recipient, uint256 _amount) public returns (bool) {
+        address owner = _msgSender();
+        _transfer(owner, _recipient, _amount);
         return true;
     }
 
@@ -184,11 +159,26 @@ contract stETHMock is IERC20 {
      *
      * @dev This value changes when `approve` or `transferFrom` is called.
      */
-    function allowance(
-        address _owner,
-        address _spender
-    ) public view returns (uint256) {
+    function allowance(address _owner, address _spender) public view returns (uint256) {
         return allowances[_owner][_spender];
+    }
+
+    /**
+     * @dev Updates `owner` s allowance for `spender` based on spent `amount`.
+     *
+     * Does not update the allowance amount in case of infinite allowance.
+     * Revert if not enough allowance is available.
+     *
+     * Might emit an {Approval} event.
+     */
+    function _spendAllowance(address owner, address spender, uint256 amount) internal virtual {
+        uint256 currentAllowance = allowance(owner, spender);
+        if (currentAllowance != type(uint256).max) {
+            require(currentAllowance >= amount, "ERC20: insufficient allowance");
+            unchecked {
+                _approve(owner, spender, currentAllowance - amount);
+            }
+        }
     }
 
     /**
@@ -200,12 +190,12 @@ contract stETHMock is IERC20 {
      * Requirements:
      *
      * - `_spender` cannot be the zero address.
-     * - the contract must not be paused.
      *
      * @dev The `_amount` argument is the amount of tokens, not shares.
      */
     function approve(address _spender, uint256 _amount) public returns (bool) {
-        _approve(msg.sender, _spender, _amount);
+        address owner = _msgSender();
+        _approve(owner, _spender, _amount);
         return true;
     }
 
@@ -225,23 +215,15 @@ contract stETHMock is IERC20 {
      * - `_sender` and `_recipient` cannot be the zero addresses.
      * - `_sender` must have a balance of at least `_amount`.
      * - the caller must have allowance for `_sender`'s tokens of at least `_amount`.
-     * - the contract must not be paused.
      *
      * @dev The `_amount` argument is the amount of tokens, not shares.
      */
-    function transferFrom(
-        address _sender,
-        address _recipient,
-        uint256 _amount
-    ) public returns (bool) {
-        uint256 currentAllowance = allowances[_sender][msg.sender];
-        require(
-            currentAllowance >= _amount,
-            "TRANSFER_AMOUNT_EXCEEDS_ALLOWANCE"
-        );
-
-        _transfer(_sender, _recipient, _amount);
-        _approve(_sender, msg.sender, currentAllowance.sub(_amount));
+    function transferFrom(address from, address to, uint256 amount) public returns (bool) {
+        address spender = _msgSender();
+        // if (!configurator.mintVault(spender)) {
+            _spendAllowance(from, spender, amount);
+        // }
+        _transfer(from, to, amount);
         return true;
     }
 
@@ -249,24 +231,15 @@ contract stETHMock is IERC20 {
      * @notice Atomically increases the allowance granted to `_spender` by the caller by `_addedValue`.
      *
      * This is an alternative to `approve` that can be used as a mitigation for
-     * problems described in:
-     * https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC20/IERC20.sol#L42
      * Emits an `Approval` event indicating the updated allowance.
      *
      * Requirements:
      *
      * - `_spender` cannot be the the zero address.
-     * - the contract must not be paused.
      */
-    function increaseAllowance(
-        address _spender,
-        uint256 _addedValue
-    ) public returns (bool) {
-        _approve(
-            msg.sender,
-            _spender,
-            allowances[msg.sender][_spender].add(_addedValue)
-        );
+    function increaseAllowance(address _spender, uint256 _addedValue) public returns (bool) {
+        address owner = _msgSender();
+        _approve(owner, _spender, allowances[owner][_spender] + _addedValue);
         return true;
     }
 
@@ -274,26 +247,21 @@ contract stETHMock is IERC20 {
      * @notice Atomically decreases the allowance granted to `_spender` by the caller by `_subtractedValue`.
      *
      * This is an alternative to `approve` that can be used as a mitigation for
-     * problems described in:
-     * https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC20/IERC20.sol#L42
      * Emits an `Approval` event indicating the updated allowance.
      *
      * Requirements:
      *
      * - `_spender` cannot be the zero address.
      * - `_spender` must have allowance for the caller of at least `_subtractedValue`.
-     * - the contract must not be paused.
      */
-    function decreaseAllowance(
-        address _spender,
-        uint256 _subtractedValue
-    ) public returns (bool) {
-        uint256 currentAllowance = allowances[msg.sender][_spender];
-        require(
-            currentAllowance >= _subtractedValue,
-            "DECREASED_ALLOWANCE_BELOW_ZERO"
-        );
-        _approve(msg.sender, _spender, currentAllowance.sub(_subtractedValue));
+    function decreaseAllowance(address spender, uint256 subtractedValue) public virtual returns (bool) {
+        address owner = _msgSender();
+        uint256 currentAllowance = allowance(owner, spender);
+        require(currentAllowance >= subtractedValue, "ERC20: decreased allowance below zero");
+        unchecked {
+            _approve(owner, spender, currentAllowance - subtractedValue);
+        }
+
         return true;
     }
 
@@ -304,7 +272,7 @@ contract stETHMock is IERC20 {
      * it is necessary to store it in order to calculate each account's relative share.
      */
     function getTotalShares() public view returns (uint256) {
-        return _getTotalShares();
+        return _totalShares;
     }
 
     /**
@@ -315,32 +283,24 @@ contract stETHMock is IERC20 {
     }
 
     /**
-     * @return the amount of shares that corresponds to `_EUSDAmount` protocol-supplied EUSD.
+     * @return the amount of shares that corresponds to `_EUSDAmount` protocol-supplied eUSD.
      */
-    function getSharesByPooledEth(
-        uint256 _EUSDAmount
-    ) public view returns (uint256) {
-        uint256 totalMintedEUSD = _getTotalMintedEUSD();
+    function getSharesByMintedEUSD(uint256 _EUSDAmount) public view returns (uint256) {
+        uint256 totalMintedEUSD = _totalSupply;
         if (totalMintedEUSD == 0) {
             return 0;
-        } else {
-            return _EUSDAmount.mul(_getTotalShares()).div(totalMintedEUSD);
         }
+        return _EUSDAmount *_totalShares / totalMintedEUSD;
     }
 
     /**
-     * @return the amount of EUSD that corresponds to `_sharesAmount` token shares.
+     * @return the amount of eUSD that corresponds to `_sharesAmount` token shares.
      */
-    function getPooledEthByShares(
-        uint256 _sharesAmount
-    ) public view returns (uint256) {
-        uint256 totalSharesAmount = _getTotalShares();
-        if (totalShares == 0) {
+    function getMintedEUSDByShares(uint256 _sharesAmount) public view returns (uint256) {
+        if (_totalShares == 0) {
             return 0;
-        } else {
-            return
-                _sharesAmount.mul(_getTotalMintedEUSD()).div(totalSharesAmount);
         }
+        return _sharesAmount * _totalSupply / _totalShares;
     }
 
     /**
@@ -354,18 +314,15 @@ contract stETHMock is IERC20 {
      *
      * - `_recipient` cannot be the zero address.
      * - the caller must have at least `_sharesAmount` shares.
-     * - the contract must not be paused.
      *
      * @dev The `_sharesAmount` argument is the amount of shares, not tokens.
      */
-    function transferShares(
-        address _recipient,
-        uint256 _sharesAmount
-    ) public returns (uint256) {
-        _transferShares(msg.sender, _recipient, _sharesAmount);
-        emit TransferShares(msg.sender, _recipient, _sharesAmount);
-        uint256 tokensAmount = getPooledEthByShares(_sharesAmount);
-        emit Transfer(msg.sender, _recipient, tokensAmount);
+    function transferShares(address _recipient, uint256 _sharesAmount) public returns (uint256) {
+        address owner = _msgSender();
+        _transferShares(owner, _recipient, _sharesAmount);
+        emit TransferShares(owner, _recipient, _sharesAmount);
+        uint256 tokensAmount = getMintedEUSDByShares(_sharesAmount);
+        emit Transfer(owner, _recipient, tokensAmount);
         return tokensAmount;
     }
 
@@ -374,12 +331,8 @@ contract stETHMock is IERC20 {
      * Emits a `Transfer` event.
      * Emits a `TransferShares` event.
      */
-    function _transfer(
-        address _sender,
-        address _recipient,
-        uint256 _amount
-    ) internal {
-        uint256 _sharesToTransfer = getSharesByPooledEth(_amount);
+    function _transfer(address _sender, address _recipient, uint256 _amount) internal {
+        uint256 _sharesToTransfer = getSharesByMintedEUSD(_amount);
         _transferShares(_sender, _recipient, _sharesToTransfer);
         emit Transfer(_sender, _recipient, _amount);
         emit TransferShares(_sender, _recipient, _sharesToTransfer);
@@ -394,25 +347,13 @@ contract stETHMock is IERC20 {
      *
      * - `_owner` cannot be the zero address.
      * - `_spender` cannot be the zero address.
-     * - the contract must not be paused.
      */
-    function _approve(
-        address _owner,
-        address _spender,
-        uint256 _amount
-    ) internal {
+    function _approve(address _owner, address _spender, uint256 _amount) internal {
         require(_owner != address(0), "APPROVE_FROM_ZERO_ADDRESS");
         require(_spender != address(0), "APPROVE_TO_ZERO_ADDRESS");
 
         allowances[_owner][_spender] = _amount;
         emit Approval(_owner, _spender, _amount);
-    }
-
-    /**
-     * @return the total amount of shares in existence.
-     */
-    function _getTotalShares() internal view returns (uint256) {
-        return totalShares;
     }
 
     /**
@@ -430,88 +371,97 @@ contract stETHMock is IERC20 {
      * - `_sender` cannot be the zero address.
      * - `_recipient` cannot be the zero address.
      * - `_sender` must hold at least `_sharesAmount` shares.
-     * - the contract must not be paused.
      */
-    function _transferShares(
-        address _sender,
-        address _recipient,
-        uint256 _sharesAmount
-    ) internal {
+    function _transferShares(address _sender, address _recipient, uint256 _sharesAmount) internal {
         require(_sender != address(0), "TRANSFER_FROM_THE_ZERO_ADDRESS");
         require(_recipient != address(0), "TRANSFER_TO_THE_ZERO_ADDRESS");
 
         uint256 currentSenderShares = shares[_sender];
-        require(
-            _sharesAmount <= currentSenderShares,
-            "TRANSFER_AMOUNT_EXCEEDS_BALANCE"
-        );
+        require(_sharesAmount <= currentSenderShares, "TRANSFER_AMOUNT_EXCEEDS_BALANCE");
 
-        shares[_sender] = currentSenderShares.sub(_sharesAmount);
-        shares[_recipient] = shares[_recipient].add(_sharesAmount);
+        shares[_sender] = currentSenderShares - _sharesAmount;
+        shares[_recipient] = shares[_recipient] + _sharesAmount;
     }
 
     /**
-     * @notice Creates `_sharesAmount` shares and assigns them to `_recipient`, increasing the total amount of shares.
-     * @dev This doesn't increase the token total supply.
+     * @notice Creates `sharesAmount` shares and assigns them to `_recipient`, increasing the total amount of shares.
+     * @dev This operation also increases the total supply of tokens.
      *
      * Requirements:
      *
      * - `_recipient` cannot be the zero address.
      * - the contract must not be paused.
      */
-    function _mintShares(
-        address _recipient,
-        uint256 _sharesAmount
-    ) internal returns (uint256 newTotalShares) {
+    function mint(address _recipient, uint256 _mintAmount) external onlyMintVault mintEnabled returns (uint256 newTotalShares) {
         require(_recipient != address(0), "MINT_TO_THE_ZERO_ADDRESS");
+        require(_mintAmount != 0, "ZA");
+        uint256 sharesAmount = getSharesByMintedEUSD(_mintAmount);
+        if (sharesAmount == 0) {
+            require(_totalSupply == 0, "ZA");
+            //eUSD totalSupply is 0: assume that shares correspond to eUSD 1-to-1
+            sharesAmount = _mintAmount;
+        }
 
-        newTotalShares = _getTotalShares().add(_sharesAmount);
-        totalShares = newTotalShares;
+        newTotalShares = _totalShares + sharesAmount;
+        _totalShares = newTotalShares;
 
-        shares[_recipient] = shares[_recipient].add(_sharesAmount);
+        shares[_recipient] = shares[_recipient] + sharesAmount;
 
-        // Notice: we're not emitting a Transfer event from the zero address here since shares mint
-        // works by taking the amount of tokens corresponding to the minted shares from all other
-        // token holders, proportionally to their share. The total supply of the token doesn't change
-        // as the result. This is equivalent to performing a send from each other token holder's
-        // address to `address`, but we cannot reflect this as it would require sending an unbounded
-        // number of events.
+        _totalSupply += _mintAmount;
+
+        emit Transfer(address(0), _recipient, _mintAmount);
     }
 
     /**
-     * @notice Destroys `_sharesAmount` shares from `_account`'s holdings, decreasing the total amount of shares.
+     * @notice Destroys `sharesAmount` shares from `_account`'s holdings, decreasing the total amount of shares.
+     * @dev This operation also decrease the total supply of tokens.
+     *
+     * Requirements:
+     *
+     * - `_account` cannot be the zero address.
+     * - `_account` must hold at least `sharesAmount` shares.
+     * - the contract must not be paused.
+     */
+    function burn(address _account, uint256 _burnAmount) external onlyMintVault burnEnabled returns (uint256 newTotalShares) {
+        require(_account != address(0), "BURN_FROM_THE_ZERO_ADDRESS");
+        uint256 sharesAmount = getSharesByMintedEUSD(_burnAmount);
+        require(sharesAmount != 0, "ZA");
+        newTotalShares = _onlyBurnShares(_account, sharesAmount);
+        _totalSupply -= _burnAmount;
+
+        emit Transfer(_account, address(0), _burnAmount);
+    }
+
+    /**
+     * @notice Destroys `sharesAmount` shares from `_account`'s holdings, decreasing the total amount of shares.
      * @dev This doesn't decrease the token total supply.
      *
      * Requirements:
      *
      * - `_account` cannot be the zero address.
-     * - `_account` must hold at least `_sharesAmount` shares.
+     * - `_account` must hold at least `sharesAmount` shares.
      * - the contract must not be paused.
      */
-    function _burnShares(
-        address _account,
-        uint256 _sharesAmount
-    ) internal returns (uint256 newTotalShares) {
+    function burnShares(address _account, uint256 _sharesAmount) external onlyMintVault burnEnabled returns (uint256 newTotalShares) {
         require(_account != address(0), "BURN_FROM_THE_ZERO_ADDRESS");
+        require(_sharesAmount != 0, "ZA");
+        newTotalShares = _onlyBurnShares(_account, _sharesAmount);
+    }
 
+    function _onlyBurnShares(address _account, uint256 _sharesAmount) private returns (uint256 newTotalShares) {
         uint256 accountShares = shares[_account];
         require(_sharesAmount <= accountShares, "BURN_AMOUNT_EXCEEDS_BALANCE");
 
-        uint256 preRebaseTokenAmount = getPooledEthByShares(_sharesAmount);
+        uint256 preRebaseTokenAmount = getMintedEUSDByShares(_sharesAmount);
 
-        newTotalShares = _getTotalShares().sub(_sharesAmount);
-        totalShares = newTotalShares;
+        newTotalShares = _totalShares - _sharesAmount;
+        _totalShares = newTotalShares;
 
-        shares[_account] = accountShares.sub(_sharesAmount);
+        shares[_account] = accountShares - _sharesAmount;
 
-        uint256 postRebaseTokenAmount = getPooledEthByShares(_sharesAmount);
+        uint256 postRebaseTokenAmount = getMintedEUSDByShares(_sharesAmount);
 
-        emit SharesBurnt(
-            _account,
-            preRebaseTokenAmount,
-            postRebaseTokenAmount,
-            _sharesAmount
-        );
+        emit SharesBurnt(_account, preRebaseTokenAmount, postRebaseTokenAmount, _sharesAmount);
 
         // Notice: we're not emitting a Transfer event to the zero address here since shares burn
         // works by redistributing the amount of tokens corresponding to the burned shares between

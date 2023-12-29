@@ -2,50 +2,46 @@
 
 pragma solidity ^0.8.17;
 
+import "../../interfaces/LybraInterfaces.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-import "../interfaces/LybraInterfaces.sol";
-
-contract LybraMintPool is Ownable {
+abstract contract EUSDVault is Ownable {
     using SafeERC20 for IERC20;
-
-    IConfigurator public immutable configurator;
     IEUSD public immutable EUSD;
     IERC20 public immutable collateralAsset;
-    // Iconfigurator public immutable configurator;
+    IConfigurator public immutable configurator;
     uint256 public constant badCollateralRatio = 150 * 1e18;
+    uint256 public etherPrice;
 
     uint256 public totalDepositedAsset;
     uint256 public lastReportTime;
     uint256 poolTotalCirculation;
 
     mapping(address => uint256) public depositedAsset;
-    mapping(address => uint256) public borrowed;
+    mapping(address => uint256) borrowed;
     uint256 public feeStored;
     mapping(address => uint256) depositedTime;
 
-    uint256 public etherPrice;
-
-    // event DepositEther(address indexed onBehalfOf, address asset, uint256 etherAmount, uint256 assetAmount, uint256 timestamp);
+    event DepositEther(address indexed onBehalfOf, address asset, uint256 etherAmount, uint256 assetAmount, uint256 timestamp);
 
     event DepositAsset(address indexed onBehalfOf, address asset, uint256 amount, uint256 timestamp);
 
     event WithdrawAsset(address indexed sponsor, address asset, address indexed onBehalfOf, uint256 amount, uint256 timestamp);
     event Mint(address indexed sponsor, address indexed onBehalfOf, uint256 amount, uint256 timestamp);
     event Burn(address indexed sponsor, address indexed onBehalfOf, uint256 amount, uint256 timestamp);
-    // event LiquidationRecord(address indexed provider, address indexed keeper, address indexed onBehalfOf, uint256 eusdamount, uint256 liquidateEtherAmount, uint256 keeperReward, bool superLiquidation, uint256 timestamp);
-    // event LSDValueCaptured(uint256 stETHAdded, uint256 payoutEUSD, uint256 discountRate, uint256 timestamp);
-    // event RigidRedemption(address indexed caller, address indexed provider, uint256 eusdAmount, uint256 collateralAmount, uint256 timestamp);
-    // event FeeDistribution(address indexed feeAddress, uint256 feeAmount, uint256 timestamp);
+    event LiquidationRecord(address indexed provider, address indexed keeper, address indexed onBehalfOf, uint256 eusdamount, uint256 liquidateEtherAmount, uint256 keeperReward, bool superLiquidation, uint256 timestamp);
+    event LSDValueCaptured(uint256 stETHAdded, uint256 payoutEUSD, uint256 discountRate, uint256 timestamp);
+    event RigidRedemption(address indexed caller, address indexed provider, uint256 eusdAmount, uint256 collateralAmount, uint256 timestamp);
+    event FeeDistribution(address indexed feeAddress, uint256 feeAmount, uint256 timestamp);
 
     //etherOracle = 0x4c517D4e2C851CA76d7eC94B805269Df0f2201De
-    constructor(address _collateralAsset, address _eusd, address _config) {
-        etherPrice = 1600e18;
+    constructor(address _collateralAsset, address _configurator) {
         collateralAsset = IERC20(_collateralAsset);
-        EUSD = IEUSD(_eusd);
-        configurator = IConfigurator(_config);
+        configurator = IConfigurator(_configurator);
+        EUSD = IEUSD(configurator.getEUSDAddress());
+        etherPrice = 2000e18;
     }
 
     function setEtherPrice(uint256 _newPrice) external onlyOwner {
@@ -61,7 +57,7 @@ contract LybraMintPool is Ownable {
      * - `mintAmount` Send 0 if doesn't mint eUSD
      * - msg.value Must be higher than 0.
      */
-    // function depositEtherToMint(uint256 mintAmount) external payable virtual;
+    function depositEtherToMint(uint256 mintAmount) external payable virtual;
 
     /**
      * @notice Deposit collateral and allow minting eUSD for oneself.
@@ -140,15 +136,15 @@ contract LybraMintPool is Ownable {
         _repay(msg.sender, onBehalfOf, amount);
     }
 
-    /**
-     * @notice Keeper liquidates borrowers whose collateral ratio is below badCollateralRatio, using eUSD provided by Liquidation Provider.
-     *
-     * Requirements:
-     * - onBehalfOf Collateral Ratio should be below badCollateralRatio
-     * - collateralAmount should be less than 50% of collateral
-     * - provider should authorize Lybra to utilize eUSD
-     * @dev After liquidation, borrower's debt is reduced by collateralAmount * etherPrice, providers and keepers can receive up to an additional 10% liquidation reward. 
-     */
+    // /**
+    //  * @notice Keeper liquidates borrowers whose collateral ratio is below badCollateralRatio, using eUSD provided by Liquidation Provider.
+    //  *
+    //  * Requirements:
+    //  * - onBehalfOf Collateral Ratio should be below badCollateralRatio
+    //  * - collateralAmount should be less than 50% of collateral
+    //  * - provider should authorize Lybra to utilize eUSD
+    //  * @dev After liquidation, borrower's debt is reduced by collateralAmount * etherPrice, providers and keepers can receive up to an additional 10% liquidation reward. 
+    //  */
     // function liquidation(address provider, address onBehalfOf, uint256 assetAmount) external virtual {
     //     uint256 assetPrice = getAssetPrice();
     //     uint256 onBehalfOfCollateralRatio = (depositedAsset[onBehalfOf] * assetPrice * 100) / borrowed[onBehalfOf];
@@ -181,15 +177,15 @@ contract LybraMintPool is Ownable {
     //     emit LiquidationRecord(provider, msg.sender, onBehalfOf, eusdAmount, reducedAsset, reward2keeper, false, block.timestamp);
     // }
 
-    /**
-     * @notice When overallCollateralRatio is below badCollateralRatio, borrowers with collateralRatio below 125% could be fully liquidated.
-     * Emits a `LiquidationRecord` event.
-     *
-     * Requirements:
-     * - Current overallCollateralRatio should be below badCollateralRatio
-     * - `onBehalfOf`collateralRatio should be below 125%
-     * @dev After Liquidation, borrower's debt is reduced by collateralAmount * etherPrice, deposit is reduced by collateralAmount * borrower's collateralRatio. Keeper gets a liquidation reward of `keeperRatio / borrower's collateralRatio
-     */
+    // /**
+    //  * @notice When overallCollateralRatio is below badCollateralRatio, borrowers with collateralRatio below 125% could be fully liquidated.
+    //  * Emits a `LiquidationRecord` event.
+    //  *
+    //  * Requirements:
+    //  * - Current overallCollateralRatio should be below badCollateralRatio
+    //  * - `onBehalfOf`collateralRatio should be below 125%
+    //  * @dev After Liquidation, borrower's debt is reduced by collateralAmount * etherPrice, deposit is reduced by collateralAmount * borrower's collateralRatio. Keeper gets a liquidation reward of `keeperRatio / borrower's collateralRatio
+    //  */
     // function superLiquidation(address provider, address onBehalfOf, uint256 assetAmount) external virtual {
     //     uint256 assetPrice = getAssetPrice();
     //     require((totalDepositedAsset * assetPrice * 100) / poolTotalCirculation < badCollateralRatio, "overallCollateralRatio should below 150%");
@@ -216,25 +212,25 @@ contract LybraMintPool is Ownable {
     //     emit LiquidationRecord(provider, msg.sender, onBehalfOf, eusdAmount, assetAmount, reward2keeper, true, block.timestamp);
     // }
 
-    /**
-     * @notice When stETH balance increases through LSD or other reasons, the excess income is sold for eUSD, allocated to eUSD holders through rebase mechanism.
-     * Emits a `LSDistribution` event.
-     *
-     * *Requirements:
-     * - stETH balance in the contract cannot be less than totalDepositedAsset after exchange.
-     * @dev Income is used to cover accumulated Service Fee first.
-     */
+    // /**
+    //  * @notice When stETH balance increases through LSD or other reasons, the excess income is sold for eUSD, allocated to eUSD holders through rebase mechanism.
+    //  * Emits a `LSDistribution` event.
+    //  *
+    //  * *Requirements:
+    //  * - stETH balance in the contract cannot be less than totalDepositedAsset after exchange.
+    //  * @dev Income is used to cover accumulated Service Fee first.
+    //  */
     // function excessIncomeDistribution(uint256 payAmount) external virtual;
 
-    /**
-     * @notice Choose a Redemption Provider, Rigid Redeem `eusdAmount` of eUSD and get 1:1 value of collateral
-     * Emits a `RigidRedemption` event.
-     *
-     * *Requirements:
-     * - `provider` must be a Redemption Provider
-     * - `provider`debt must equal to or above`eusdAmount`
-     * @dev Service Fee for rigidRedemption `redemptionFee` is set to 0.5% by default, can be revised by DAO.
-     */
+    // /**
+    //  * @notice Choose a Redemption Provider, Rigid Redeem `eusdAmount` of eUSD and get 1:1 value of collateral
+    //  * Emits a `RigidRedemption` event.
+    //  *
+    //  * *Requirements:
+    //  * - `provider` must be a Redemption Provider
+    //  * - `provider`debt must equal to or above`eusdAmount`
+    //  * @dev Service Fee for rigidRedemption `redemptionFee` is set to 0.5% by default, can be revised by DAO.
+    //  */
     // function rigidRedemption(address provider, uint256 eusdAmount, uint256 minReceiveAmount) external virtual {
     //     require(provider != msg.sender, "CBS");
     //     require(configurator.isRedemptionProvider(provider), "provider is not a RedemptionProvider");
@@ -271,7 +267,7 @@ contract LybraMintPool is Ownable {
         borrowed[_provider] += _mintAmount;
 
         EUSD.mint(_onBehalfOf, _mintAmount);
-        // _saveReport();
+        _saveReport();
         poolTotalCirculation += _mintAmount;
         _checkHealth(_provider, _assetPrice);
         emit Mint(msg.sender, _onBehalfOf, _mintAmount, block.timestamp);
@@ -289,7 +285,7 @@ contract LybraMintPool is Ownable {
         configurator.refreshMintReward(_onBehalfOf);
 
         borrowed[_onBehalfOf] -= amount;
-        // _saveReport();
+        _saveReport();
         poolTotalCirculation -= amount;
         emit Burn(_provider, _onBehalfOf, amount, block.timestamp);
     }
@@ -298,22 +294,24 @@ contract LybraMintPool is Ownable {
      * @dev Get USD value of current collateral asset and minted eUSD through price oracle / Collateral asset USD value must higher than safe Collateral Ratio.
      */
     function _checkHealth(address _user, uint256 _assetPrice) internal view {
-        if (((depositedAsset[_user] * _assetPrice * 100) / borrowed[_user]) < badCollateralRatio) revert("collateralRatio is Below safeCollateralRatio");
+        if (((depositedAsset[_user] * _assetPrice * 100) / borrowed[_user]) < configurator.getSafeCollateralRatio(address(this))) 
+            revert("collateralRatio is Below safeCollateralRatio");
     }
 
-    // function _saveReport() internal {
-    //     feeStored += _newFee();
-    //     lastReportTime = block.timestamp;
-    // }
+    function _saveReport() internal {
+        feeStored += _newFee();
+        lastReportTime = block.timestamp;
+    }
 
-    // function _newFee() internal view returns (uint256) {
-    //     return (poolTotalCirculation * configurator.vaultMintFeeApy(address(this)) * (block.timestamp - lastReportTime)) / (86_400 * 365) / 10_000;
-    // }
+    function _newFee() internal view returns (uint256) {
+        return (poolTotalCirculation * configurator.vaultMintFeeApy(address(this)) * (block.timestamp - lastReportTime)) / (86_400 * 365) / 10_000;
+    }
 
     /**
      * @dev Return USD value of current ETH through Liquity PriceFeed Contract.
      */
-    function _etherPrice() internal view returns (uint256) {
+    function _etherPrice() internal returns (uint256) {
+        etherPrice = etherPrice;
         return etherPrice;
     }
 
@@ -333,8 +331,6 @@ contract LybraMintPool is Ownable {
         return 0;
     }
 
-    function getAssetPrice() public view returns (uint256) {
-        return _etherPrice();
-    }
-    // function getAsset2EtherExchangeRate() external view virtual returns (uint256);
+    function getAssetPrice() public virtual returns (uint256);
+    function getAsset2EtherExchangeRate() external view virtual returns (uint256);
 }

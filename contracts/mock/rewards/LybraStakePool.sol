@@ -5,10 +5,13 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+import "../../interfaces/LybraInterfaces.sol";
+
 contract StakePool is Ownable {
     using SafeERC20 for IERC20;
     // Immutable variables for staking and rewards tokens
     IERC20 public immutable stakingToken;
+    IEUSD public immutable rewardsToken;
 
     // Duration of rewards to be paid out (in seconds)
     uint256 public duration = 604_800;
@@ -17,7 +20,7 @@ contract StakePool is Ownable {
     // Minimum of last updated time and reward finish time
     uint256 public updatedAt;
     // Reward to be paid out per second
-    uint256 public rewardRatio;
+    uint256 public rewardRatio = 1e18;
     // Sum of (reward ratio * dt * 1e18 / total supply)
     uint256 public rewardPerTokenStored;
     // User address => rewardPerTokenStored
@@ -39,8 +42,9 @@ contract StakePool is Ownable {
     event DurationChanged(uint256 duration, uint256 time);
     event BoostChanged(address boostAddr, uint256 time);
 
-    constructor(address _stakingToken) {
+    constructor(address _stakingToken, address _rewardToken) {
         stakingToken = IERC20(_stakingToken);
+        rewardsToken = IEUSD(_rewardToken);
     }
 
     // Update user's claimable reward data and record the timestamp.
@@ -88,8 +92,9 @@ contract StakePool is Ownable {
         emit WithdrawToken(msg.sender, _amount, block.timestamp);
     }
 
-    function getBoost(address _account) public pure returns (uint256) {
-        return 100 * 1e18;
+    function getBoost(address _account) public view returns (uint256) {
+        uint256 temp = userUpdatedAt[_account];
+        return 100 * 1e18 + (temp - temp);
     }
 
     // Calculates and returns the earned rewards for a user
@@ -102,7 +107,7 @@ contract StakePool is Ownable {
         uint256 reward = rewards[msg.sender];
         if (reward > 0) {
             rewards[msg.sender] = 0;
-            // rewardsToken.mint(msg.sender, reward);
+            rewardsToken.mint(msg.sender, reward);
             emit ClaimReward(msg.sender, reward, block.timestamp);
         }
     }
