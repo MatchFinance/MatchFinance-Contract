@@ -87,12 +87,13 @@ contract RewardManager is Initializable, OwnableUpgradeable, ReentrancyGuardUpgr
 
     // function initialize(address _matchPool) public initializer {
     //     __Ownable_init();
+    //     __ReentrancyGuard_init();
 
     //     matchPool = IMatchPool(_matchPool);
     //     setMiningRewardShares(0, 20);
     // }
 
-    function initialize() public reinitializer(2) {
+    function initializeV2() public reinitializer(2) {
         __ReentrancyGuard_init();
     }
 
@@ -547,7 +548,7 @@ contract RewardManager is Initializable, OwnableUpgradeable, ReentrancyGuardUpgr
      * @notice Get pending reward in a specific distributor
      *         The caller should be the staking pools
      */
-    function pendingRewardInDistributor(address _rewardToken) external returns (uint256) {
+    function pendingRewardInDistributor(address _rewardToken) external view returns (uint256) {
         address _distributor = rewardDistributors[_rewardToken];
         if (_distributor == address(0)) return 0;
 
