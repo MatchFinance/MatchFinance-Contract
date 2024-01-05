@@ -4,7 +4,6 @@ pragma solidity ^0.8.19;
 
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import "./interfaces/LybraInterfaces.sol";
@@ -16,8 +15,12 @@ import { IRewardDistributorFactory } from "./interfaces/IRewardDistributorFactor
 
 error UnpaidInterest();
 error RewardNotOpen();
+error ReentrancyGuardReentrantCall();
 
-contract RewardManager is Initializable, OwnableUpgradeable, ReentrancyGuardUpgradeable {
+contract RewardManager is Initializable, OwnableUpgradeable {
+    uint256 constant ENTERED = 1;
+    uint256 constant NOT_ENTERED = 2;
+
     IMatchPool public matchPool;
 
     // reward pool => amount
@@ -47,6 +50,10 @@ contract RewardManager is Initializable, OwnableUpgradeable, ReentrancyGuardUpgr
     uint128 stakerShare;
 
     IERC20Mintable public mesLBR;
+
+    /******************************************************************/
+
+    uint256 reentracncy;
 
     // !! @modify Eric 20231030
     IMTokenStaking public mesLBRStaking;
@@ -87,17 +94,18 @@ contract RewardManager is Initializable, OwnableUpgradeable, ReentrancyGuardUpgr
     event eUSDRewardClaimed(address account, uint256 rewardAmount);
     event RewardDistributedToDistributors(uint256 boostReward, uint256 treasuryReward, uint256 protocolRevenue);
 
-    // function initialize(address _matchPool) public initializer {
+    modifier nonReentrant() {
+        _nonReentrantBefore();
+        _;
+        _nonReentrantAfter();
+    }
+
+    // function initializeTest(address _matchPool) public initializer {
     //     __Ownable_init();
-    //     __ReentrancyGuard_init();
 
     //     matchPool = IMatchPool(_matchPool);
     //     setMiningRewardShares(0, 20);
     // }
-
-    function initializeV2() public reinitializer(2) {
-        __ReentrancyGuard_init();
-    }
 
     // ---------------------------------------------------------------------------------------- //
     // ************************************ View Functions ************************************ //
@@ -615,5 +623,14 @@ contract RewardManager is Initializable, OwnableUpgradeable, ReentrancyGuardUpgr
             (share * (rpt - userRewardsPerTokenPaid[_rewardPool][_account])) /
             1e18 +
             userRewards[_rewardPool][_account];
+    }
+
+    function _nonReentrantBefore() private {
+        if (reentracncy == ENTERED) revert ReentrancyGuardReentrantCall();
+        reentracncy = ENTERED;
+    }
+
+    function _nonReentrantAfter() private {
+        reentracncy = NOT_ENTERED;
     }
 }
