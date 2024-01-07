@@ -12,5 +12,5 @@ interface IRewardManager {
     // !! @modify Eric Lee 20231207
     function distributeRewardFromDistributor(address _rewardToken) external returns (uint256);
 
-    function pendingRewardInDistributor(address _rewardToken) external view returns (uint256);
+    function pendingRewardInDistributor(address _rewardToken, address _receiver) external view returns (uint256);
 }

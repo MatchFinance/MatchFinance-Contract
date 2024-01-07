@@ -12,7 +12,7 @@ import "./interfaces/IMatchPool.sol";
 import { IMTokenStaking } from "./interfaces/IMTokenStaking.sol";
 import { IRewardCenter } from "./interfaces/IRewardCenter.sol";
 import { IERC20Mintable } from "./interfaces/IERC20Mintable.sol";
-import { IRewardDistributor } from "./interfaces/IRewardDistributor.sol";
+import { IRewardDistributorFactory } from "./interfaces/IRewardDistributorFactory.sol";
 
 error UnpaidInterest();
 error RewardNotOpen();
@@ -66,6 +66,8 @@ contract RewardManager is Initializable, OwnableUpgradeable, ReentrancyGuardUpgr
     // ! 2023-12-25 add VLMatch address, used for vlMatch staking reward distribution
     address public vlMatch;
     address public vlMatchStaking;
+
+    address public rewardDistributorFactory;
 
     // ---------------------------------------------------------------------------------------- //
     // *************************************** Events ***************************************** //
@@ -511,22 +513,34 @@ contract RewardManager is Initializable, OwnableUpgradeable, ReentrancyGuardUpgr
 
     /**
      * @notice Distribute the reward to corresponding distributor contracts
+     *
+     * @dev    Total mesLBR Reward: 150 = boost reward (50) + treasury reward (100)
+     *
+     *         Boost Reward to:
+     *         1) mesLBR staking (40)
+     *
+     *         Treasury Reward to:
+     *         1) vlMatch staking (10)
+     *
+     *         peUSD / altStablecoin to:
+     *         1) mesLBR staking
      */
     function _distributeRewardToDistributors(uint256 _boostReward, uint256 _treasuryReward) internal {
         // Mint boost reward mesLBR to reward distributor
         // Reward token: mesLBR
         // Receiver: mesLBR staking contract
-        mesLBR.mint(rewardDistributors[address(mesLBR)], _boostReward);
+        mesLBR.mint(
+            IRewardDistributorFactory(rewardDistributorFactory).distributors(address(mesLBR), address(mesLBRStaking)),
+            _boostReward
+        );
 
-        // ! 2023-12-25 added
-        // ! We use "vlMatch" as the key of this mapping, but it is not proper
-        // ! (because vlMatch is not a reward token)
-        // ! It is not proper, but now we only have four deterministic reward distributors
-        // ! It is difficult to update & add more reward distributors
         // Transfer treasury reward to reward distributor for vlMatch staking
         // Reward token: mesLBR
         // Receiver: vlMatch staking contract
-        mesLBR.mint(rewardDistributors[vlMatch], _treasuryReward);
+        mesLBR.mint(
+            IRewardDistributorFactory(rewardDistributorFactory).distributors(address(mesLBR), vlMatchStaking),
+            _treasuryReward
+        );
 
         // Transfer stablecoin protocol revenue to reward distributor
         address peUSD = lybraConfigurator.peUSD();
@@ -538,8 +552,14 @@ contract RewardManager is Initializable, OwnableUpgradeable, ReentrancyGuardUpgr
         // ! Transfer all peUSD and altStablecoin to their distributors
         // ! It seems proper for now
         // ! All peUSD and altStablecoin inside this contract is from protocol revenue
-        IERC20(peUSD).transfer(rewardDistributors[peUSD], peUSDBalance);
-        IERC20(altStablecoin).transfer(rewardDistributors[altStablecoin], altStablecoinBalance);
+        IERC20(peUSD).transfer(
+            IRewardDistributorFactory(rewardDistributorFactory).distributors(peUSD, address(mesLBRStaking)),
+            peUSDBalance
+        );
+        IERC20(altStablecoin).transfer(
+            IRewardDistributorFactory(rewardDistributorFactory).distributors(altStablecoin, address(mesLBRStaking)),
+            altStablecoinBalance
+        );
 
         emit RewardDistributedToDistributors(_boostReward, _treasuryReward, peUSDBalance + altStablecoinBalance);
     }
@@ -548,20 +568,17 @@ contract RewardManager is Initializable, OwnableUpgradeable, ReentrancyGuardUpgr
      * @notice Get pending reward in a specific distributor
      *         The caller should be the staking pools
      */
-    function pendingRewardInDistributor(address _rewardToken) external view returns (uint256) {
-        address _distributor = rewardDistributors[_rewardToken];
-        if (_distributor == address(0)) return 0;
-
-        return IRewardDistributor(_distributor).pendingReward();
+    function pendingRewardInDistributor(address _rewardToken, address _receiver) external view returns (uint256) {
+        return IRewardDistributorFactory(rewardDistributorFactory).pendingReward(_rewardToken, _receiver);
     }
 
     function distributeRewardFromDistributor(address _rewardToken) external returns (uint256) {
-        if (_rewardToken == vlMatch) require(msg.sender == vlMatchStaking, "Only vlMatch staking");
-        else require(msg.sender == address(mesLBRStaking), "Only mesLBR staking");
+        // Reward receiver is the caller
+        address receiver = msg.sender;
+        require(receiver == address(mesLBRStaking) || receiver == vlMatchStaking, "Invalid receiver");
 
         // Distribute the reward and return the amount that has been distributed
-        IRewardDistributor distributor = IRewardDistributor(rewardDistributors[_rewardToken]);
-        return distributor.distribute();
+        return IRewardDistributorFactory(rewardDistributorFactory).distribute(_rewardToken, receiver);
     }
 
     function getAllRewards(bool _stakeNow) external {

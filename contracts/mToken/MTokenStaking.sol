@@ -17,7 +17,7 @@ import { IRewardManager } from "../interfaces/IRewardManager.sol";
  * @notice Users can stake mesLBR inside this contract to get:
  *         1) 100% boosting reward from Lybra (more mesLBR)
  *         2) 100% protocol revenue from Lybra (peUSD / altStablecoin)
- *         
+ *
  */
 contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     using SafeERC20 for IERC20;
@@ -166,9 +166,14 @@ contract MTokenStaking is OwnableUpgradeable, ReentrancyGuardUpgradeable {
      * @return pendingProtocolRevenue Pending protocol revenue
      */
     function pendingRewards(address _user) public view returns (uint256, uint256) {
-        uint256 newPendingBoostReward = IRewardManager(rewardManager).pendingRewardInDistributor(address(mToken));
-        uint256 newPendingProtocolRevenue = IRewardManager(rewardManager).pendingRewardInDistributor(address(peUSD)) +
-            IRewardManager(rewardManager).pendingRewardInDistributor(address(altStableRewardToken));
+        uint256 newPendingBoostReward = IRewardManager(rewardManager).pendingRewardInDistributor(
+            address(mToken),
+            address(this)
+        );
+        uint256 newPendingProtocolRevenue = IRewardManager(rewardManager).pendingRewardInDistributor(
+            address(peUSD),
+            address(this)
+        ) + IRewardManager(rewardManager).pendingRewardInDistributor(address(altStableRewardToken), address(this));
 
         UserInfo memory user = users[_user];
 
