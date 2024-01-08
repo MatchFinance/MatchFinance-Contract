@@ -83,9 +83,9 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     // { totalBorrowed } is still just sum of principal
     struct BorrowInfo {
         uint256 principal; // Amount of eUSD/peUSD borrowed
-        uint256 userFeePerTokenPaid; // peUSD mint fee
-        uint256 accInterest; // Accumulated interest
         uint256 interestIndex; // Last updated { borrowIndex }
+        uint256 accInterest; // Accumulated interest
+        uint256 userFeePerTokenPaid; // peUSD mint fee
     }
     // Mint vault => user address => eUSD/peUSD 'taken out/borrowed' by user
     mapping(address => mapping(address => BorrowInfo)) public borrowed;
@@ -128,7 +128,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
     // Mint pool => deposit helper
     mapping(address => IDepositHelper) depositHelpers;
-    mapping(address => bool) isRebase;
+    mapping(address => bool) public isRebase;
 
     IesLBRBoost public esLBRBoost;
 
@@ -190,15 +190,13 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         _nonReentrantAfter();
     }
 
-    // function initialize() public initializer {
+    // function initializeTest() public initializer {
     //     __Ownable_init();
-
-    //     setCollateralRatioRange(190e18, 210e18, 200e18);
+    //     reentracncy = NOT_ENTERED;
+    //     setCollateralRatioRange(150e18, 190e18, 200e18);
     //     setBorrowRate(1e17);
-    //     setBorrowRatio(80e18, 75e18, 50e18);
+    //     setBorrowRatio(80e18, 75e18);
     //     setLiquidationParamsNormal(110e18, 50e18);
-    //     setStakeLimit(60000e18);
-    //     setSupplyLimit(4000000e18);
     // }
 
     function initializeV2() public reinitializer(2) {
@@ -244,7 +242,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         }
 
         // peUSD mint fee
-        if (isRebase[_mintPoolAddress]) {
+        if (!isRebase[_mintPoolAddress]) {
             uint256 fpt = _feePerToken(_mintPoolAddress, _timePassed(_mintPoolAddress));
             interest += (supplied[_mintPoolAddress][_account] * (fpt - borrowInfo.userFeePerTokenPaid)) / 1e18;
         }
@@ -471,7 +469,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         ) revert ExceedLimit();
 
         // Only non-rebase pools have to update interest before changing supply amounts
-        if (isRebasePool) accrueInterest(mintPoolAddress, msg.sender);
+        if (!isRebasePool) accrueInterest(mintPoolAddress, msg.sender);
         rewardManager.lsdUpdateReward(msg.sender, isRebasePool);
 
         supplied[mintPoolAddress][msg.sender] += amount;
@@ -501,7 +499,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         ) revert ExceedLimit();
 
         // Only non-rebase pools have to update interest before changing supply amounts
-        if (isRebasePool) accrueInterest(mintPoolAddress, msg.sender);
+        if (!isRebasePool) accrueInterest(mintPoolAddress, msg.sender);
         rewardManager.lsdUpdateReward(msg.sender, isRebasePool);
         IERC20(mintPool.getAsset()).safeTransferFrom(msg.sender, address(this), _amount);
 
@@ -685,50 +683,10 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         mintUSD(mintPoolAddress);
     }
 
-    // function liquidate(
-    //     uint256 _poolIndex,
-    //     address _account,
-    //     uint256 _repayAmount
-    // ) external {
-    //     IMintPool mintPool = mintPools[_poolIndex];
-    //     address mintPoolAddress = address(mintPool);
-    //     bool isRebasePool = isRebase[mintPoolAddress];
-    //     uint256 tokenPrice = mintPool.getAssetPrice();
-
-    //     // Amount user has to borrow more than in order to be liquidated
-    //     uint256 liquidationThreshold = (supplied[mintPoolAddress][_account] *
-    //         tokenPrice * 100) / collateralRatioIdeal;
-    //     uint256 userBorrowed = borrowed[mintPoolAddress][msg.sender].principal;
-    //     if (userBorrowed <= liquidationThreshold) revert HealthyAccount();
-
-    //     uint256 globalBorrowRatio = (totalBorrowed[mintPoolAddress] * 1e20) /
-    //         _getMaxBorrow(totalSupplied[mintPoolAddress], tokenPrice);
-    //     uint256 _closeFactor = globalBorrowRatio < globalBorrowRatioLiquidation
-    //         ? closeFactor : closeFactorNormal;
-    //     uint256 _liquidationDiscount = globalBorrowRatio < globalBorrowRatioLiquidation
-    //         ? liquidationDiscount : liquidationDiscountNormal;
-
-    //     uint256 maxRepay = (userBorrowed * _closeFactor) / 1e20;
-    //     if (_repayAmount > maxRepay) revert ExceedAmountAllowed(_repayAmount, maxRepay);
-
-    //     // Both liquidator's & liquidatee's supplied amount will be changed
-    //     rewardManager.lsdUpdateReward(_account, isRebasePool);
-    //     rewardManager.lsdUpdateReward(msg.sender, isRebasePool);
-
-    //     repayUSD(_poolIndex, _account, _repayAmount);
-    //     uint256 seizeAmount = (_repayAmount * _liquidationDiscount * 1e18) / 1e20 / tokenPrice;
-    //     supplied[mintPoolAddress][_account] -= seizeAmount;
-    //     supplied[mintPoolAddress][msg.sender] += seizeAmount;
-
-    //     emit Liquidated(mintPoolAddress, _account, msg.sender, seizeAmount);
-
-    //     mintUSD(mintPoolAddress);
-    // }
-
     /**
      * @notice Update interest index based on borrow ratio before new changes
      * @dev Must be called before updating totalMinted/totalBorrowed for rebase pools
-     *   & totalMinted/totalSupplied for non-rebase pools
+     *   & totalMinted/totalBorrowed/totalSupplied for non-rebase pools
      */
     function accrueInterest(address _mintPoolAddress, address _account) public {
         uint256 timeDelta = _timePassed(_mintPoolAddress);
@@ -743,7 +701,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
             interestInfo.interestIndexGlobal = currentInterestIndex;
 
         // Update peUSD mint fee
-        if (isRebase[_mintPoolAddress]) {
+        if (!isRebase[_mintPoolAddress]) {
             fpt = _feePerToken(_mintPoolAddress, timeDelta);
             feePerTokenStored[_mintPoolAddress] = fpt;
         }
@@ -753,14 +711,16 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         if (_account != address(0)) {
             BorrowInfo storage borrowInfo = borrowed[_mintPoolAddress][_account];
 
-            uint256 newInterest = (borrowInfo.principal * currentInterestIndex) /
-                borrowInfo.interestIndex -
-                borrowInfo.principal;
+            uint256 newInterest;
+            if (borrowInfo.principal > 0) 
+                newInterest += (borrowInfo.principal * currentInterestIndex) / borrowInfo.interestIndex - borrowInfo.principal;
+
             if (fpt > 0) {
                 newInterest += (supplied[_mintPoolAddress][_account] * (fpt - borrowInfo.userFeePerTokenPaid)) / 1e18;
                 borrowInfo.userFeePerTokenPaid = fpt;
             }
-            borrowInfo.accInterest += newInterest;
+
+            if (newInterest > 0) borrowInfo.accInterest += newInterest;
             borrowInfo.interestIndex = currentInterestIndex;
         }
     }
