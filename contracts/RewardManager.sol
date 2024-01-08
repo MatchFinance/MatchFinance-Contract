@@ -16,6 +16,7 @@ import { IRewardDistributorFactory } from "./interfaces/IRewardDistributorFactor
 error UnpaidInterest();
 error RewardNotOpen();
 error ReentrancyGuardReentrantCall();
+error WIP();
 
 contract RewardManager is Initializable, OwnableUpgradeable {
     uint256 constant ENTERED = 1;
@@ -431,6 +432,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
     }
 
     function getReward(address _rewardPool, bool _stakeNow) public nonReentrant {
+        revert WIP();
         if (address(mesLBR) == address(0)) revert RewardNotOpen();
 
         address _dlpRewardPool = dlpRewardPool;
@@ -493,6 +495,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
     //   - treasury reward to vlMatch stakers (1 distributor)
     //   - protocol revenue to mesLBR stakers (2 distributors)
     function updateRewardDistributors() public {
+        revert WIP();
         // !! @modify Code added by Eric 20231030
         uint256 protocolRevenue = IRewardPool(lybraProtocolRevenue).earned(address(matchPool));
 

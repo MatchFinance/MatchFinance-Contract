@@ -25,6 +25,7 @@ error BorrowPaused();
 error ExceedLimit();
 error InvalidRange(uint256 paramPos);
 error ReentrancyGuardReentrantCall();
+error WIP();
 
 contract MatchPool is Initializable, OwnableUpgradeable {
     using SafeERC20 for IERC20;
@@ -839,6 +840,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     // !! @modify Code added by Eric 20231228
     // !!         Remove access control
     function claimProtocolRevenue() external {
+        revert WIP();
         IConfigurator config = lybraConfigurator;
 
         IRewardPool(config.getProtocolRewardsPool()).getReward();
