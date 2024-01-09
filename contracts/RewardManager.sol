@@ -58,22 +58,12 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 
     // !! @modify Eric 20231030
     IMTokenStaking public mesLBRStaking;
+    address public vlMatchStaking;
 
     // !! @modify Eric 20231030
-    address public lybraProtocolRevenue;
     uint256 public pendingBoostReward;
 
-    // !! @modify Eric 20231207
-    // Different reward tokens and receivers have different reward distributors
-    // e.g. [peUSD, mesLBR staking] distributor, [mesLBR, mesLBR staking] distributor
-    //      boosting and mining rewards from Lybra will be sent to these distributors
-    mapping(address rewardToken => address rewardDistributor) public rewardDistributors;
-
     IConfigurator public lybraConfigurator;
-
-    // ! 2023-12-25 add VLMatch address, used for vlMatch staking reward distribution
-    address public vlMatch;
-    address public vlMatchStaking;
 
     address public rewardDistributorFactory;
 
@@ -288,11 +278,6 @@ contract RewardManager is Initializable, OwnableUpgradeable {
         emit MiningRewardPoolsChanged(_mining, _eUSD);
     }
 
-    function setProtocolRevenuePool(address _protocolRevenue) external onlyOwner {
-        lybraProtocolRevenue = _protocolRevenue;
-        emit ProtocolRevenuePoolChanged(_protocolRevenue);
-    }
-
     function setMesLBRStakingPool(address _mesLBRStaking) external onlyOwner {
         mesLBRStaking = IMTokenStaking(_mesLBRStaking);
         emit mesLBRStakingPoolChanged(_mesLBRStaking);
@@ -497,7 +482,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
     function updateRewardDistributors() public {
         revert WIP();
         // !! @modify Code added by Eric 20231030
-        uint256 protocolRevenue = IRewardPool(lybraProtocolRevenue).earned(address(matchPool));
+        uint256 protocolRevenue = IRewardPool(lybraConfigurator.getProtocolRewardsPool()).earned(address(matchPool));
 
         // Get peUSD(or peUSD & USDC)
         // Protocol revenue will first goes to this contract
@@ -584,6 +569,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
     }
 
     function distributeRewardFromDistributor(address _rewardToken) external returns (uint256) {
+        revert WIP();
         // Reward receiver is the caller
         address receiver = msg.sender;
         require(receiver == address(mesLBRStaking) || receiver == vlMatchStaking, "Invalid receiver");
