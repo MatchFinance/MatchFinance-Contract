@@ -94,3 +94,8 @@ interface IEUSD {
 
     function transfer(address to, uint256 amount) external returns (bool);
 }
+
+interface IesLBRBoost {
+    function setLockStatus(uint256 id, uint256 lbrAmount, bool useLBR) external;
+}
+
