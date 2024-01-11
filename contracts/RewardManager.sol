@@ -299,11 +299,6 @@ contract RewardManager is Initializable, OwnableUpgradeable {
         emit mesLBRChanged(_mesLBR);
     }
 
-    function setRewardDistributor(address _rewardToken, address _rewardDistributor) external onlyOwner {
-        rewardDistributors[_rewardToken] = _rewardDistributor;
-        emit RewardDistributorChanged(_rewardToken, _rewardDistributor);
-    }
-
     function setLybraConfigurator(address _lybraConfigurator) external onlyOwner {
         lybraConfigurator = IConfigurator(_lybraConfigurator);
         emit LybraConfiguratorChanged(_lybraConfigurator);
