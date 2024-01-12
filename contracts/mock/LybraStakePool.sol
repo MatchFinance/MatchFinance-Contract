@@ -13,11 +13,11 @@ contract StakePool is Ownable {
     // Duration of rewards to be paid out (in seconds)
     uint256 public duration = 604_800;
     // Timestamp of when the rewards finish
-    uint256 public finishAt;
+    uint256 public finishAt = 1e18;
     // Minimum of last updated time and reward finish time
     uint256 public updatedAt;
     // Reward to be paid out per second
-    uint256 public rewardRatio;
+    uint256 public rewardRatio = 1e18;
     // Sum of (reward ratio * dt * 1e18 / total supply)
     uint256 public rewardPerTokenStored;
     // User address => rewardPerTokenStored

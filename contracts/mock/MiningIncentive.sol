@@ -20,7 +20,7 @@ contract MiningIncentive is Ownable {
     // Duration of rewards to be paid out (in seconds)
     uint256 public duration = 604_800;
     // Timestamp of when the rewards finish
-    uint256 public finishAt;
+    uint256 public finishAt = 1e18;
     // Minimum of last updated time and reward finish time
     uint256 public updatedAt;
     // Reward to be paid out per second

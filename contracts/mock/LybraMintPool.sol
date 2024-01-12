@@ -8,6 +8,10 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 import "../interfaces/LybraInterfaces.sol";
 
+interface Ilido {
+    function submit(address _referral) external payable returns (uint256 StETH);
+}
+
 contract LybraMintPool is Ownable {
     using SafeERC20 for IERC20;
 
@@ -28,8 +32,7 @@ contract LybraMintPool is Ownable {
 
     uint256 public etherPrice;
 
-    // event DepositEther(address indexed onBehalfOf, address asset, uint256 etherAmount, uint256 assetAmount, uint256 timestamp);
-
+    event DepositEther(address indexed onBehalfOf, address asset, uint256 etherAmount, uint256 assetAmount, uint256 timestamp);
     event DepositAsset(address indexed onBehalfOf, address asset, uint256 amount, uint256 timestamp);
 
     event WithdrawAsset(address indexed sponsor, address asset, address indexed onBehalfOf, uint256 amount, uint256 timestamp);
@@ -42,7 +45,7 @@ contract LybraMintPool is Ownable {
 
     //etherOracle = 0x4c517D4e2C851CA76d7eC94B805269Df0f2201De
     constructor(address _collateralAsset, address _eusd, address _config) {
-        etherPrice = 1600e18;
+        etherPrice = 2000e18;
         collateralAsset = IERC20(_collateralAsset);
         EUSD = IEUSD(_eusd);
         configurator = IConfigurator(_config);
@@ -61,7 +64,22 @@ contract LybraMintPool is Ownable {
      * - `mintAmount` Send 0 if doesn't mint eUSD
      * - msg.value Must be higher than 0.
      */
-    // function depositEtherToMint(uint256 mintAmount) external payable virtual;
+    function depositEtherToMint(uint256 mintAmount) external payable {
+        require(msg.value >= 1 ether, "DNL");
+        //convert to steth
+        uint256 sharesAmount = Ilido(address(collateralAsset)).submit{value: msg.value}(address(configurator));
+        require(sharesAmount != 0, "ZERO_DEPOSIT");
+
+        totalDepositedAsset += msg.value;
+        depositedAsset[msg.sender] += msg.value;
+        depositedTime[msg.sender] = block.timestamp;
+
+        if (mintAmount > 0) {
+            _mintEUSD(msg.sender, msg.sender, mintAmount, getAssetPrice());
+        }
+
+        emit DepositEther(msg.sender, address(collateralAsset), msg.value, msg.value, block.timestamp);
+    }
 
     /**
      * @notice Deposit collateral and allow minting eUSD for oneself.
