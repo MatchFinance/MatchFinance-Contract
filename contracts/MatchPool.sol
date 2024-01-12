@@ -138,6 +138,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     event StakeLimitChanged(uint256 newLimit);
     event SupplyLimitChanged(uint256 newLimit);
     event MonitorChanged(address newMonitor);
+    event MintPoolAdded(address newPool);
 
     event LpStaked(address indexed account, uint256 amount);
     event LpWithdrew(address indexed account, uint256 amount);
@@ -163,6 +164,11 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     //     setStakeLimit(60000e18);
     //     setSupplyLimit(4000000e18);
     // }
+
+    function initializeTest() public initializer {
+        __Ownable_init();
+        setCollateralRatioRange(190e18, 210e18, 200e18);
+    }
 
     function getMintPool() public view returns(IMintPool) {
         return mintPools.length > 0 ? mintPools[0] : IMintPool(address(0));
@@ -255,10 +261,10 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         emit MonitorChanged(_monitor);
     }
 
-    // function addMintPool(address _mintPool) external onlyOwner {
-    //     mintPools.push(IMintPool(_mintPool));
-    //     emit MintPoolAdded(_mintPool);
-    // }
+    function addMintPool(address _mintPool) external onlyOwner {
+        mintPools.push(IMintPool(_mintPool));
+        emit MintPoolAdded(_mintPool);
+    }
     
     // function zap() external payable {
     //     if (stakePaused) revert StakePaused();
@@ -681,7 +687,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         uint256 _depositedAmount,
         uint256 _mintedAmount,
         uint256 _price
-    ) private returns (uint256) {
+    ) private view returns (uint256) {
         uint256 newMintedAmount = _depositedAmount * _price * 100 / collateralRatioIdeal;
         return newMintedAmount > _mintedAmount ?
             newMintedAmount - _mintedAmount : _mintedAmount - newMintedAmount;
@@ -718,9 +724,12 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         uint256 allowance = stETH.allowance(address(this), mintPoolAddress);
         if (allowance < _amount) stETH.approve(mintPoolAddress, type(uint256).max);
 
+        if (_eUSDMintAmount > 0) {
+            rewardManager.lsdUpdateReward(address(0));
+            totalMinted[mintPoolAddress] += _eUSDMintAmount;
+        }
         mintPool.depositAssetToMint(_amount, _eUSDMintAmount);
         totalDeposited[mintPoolAddress] += _amount;
-        if (_eUSDMintAmount > 0) totalMinted[mintPoolAddress] += _eUSDMintAmount;
     }
 
     /**
@@ -760,6 +769,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         IMintPool mintPool = getMintPool();
         address mintPoolAddress = address(mintPool);
 
+        rewardManager.lsdUpdateReward(address(0));
         mintPool.mint(address(this), _amount);
         totalMinted[mintPoolAddress] += _amount;
     }
@@ -768,6 +778,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         IMintPool mintPool = getMintPool();
         address mintPoolAddress = address(mintPool);
 
+        rewardManager.lsdUpdateReward(address(0));
         mintPool.burn(address(this), _amount);
         totalMinted[mintPoolAddress] -= _amount;
     }
