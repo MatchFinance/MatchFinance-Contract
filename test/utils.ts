@@ -19,10 +19,12 @@ export const deploy = async (contractName: string, params: Array<any>) => {
   return await contract.deployed();
 };
 
-export const deployUpgradeable = async (contractName: string, params: Array<any>) => {
+export const deployUpgradeable = async (contractName: string, params: Array<any>, testing = false) => {
   const signers = await ethers.getSigners();
   const factory: ContractFactory = await ethers.getContractFactory(contractName);
-  const contract: Contract = await upgrades.deployProxy(factory, params);
+  const contract: Contract = await upgrades.deployProxy(
+    factory, params, testing ? { initializer: "initializeTest" } : {}
+  );
 
   return await contract.deployed();
 };
