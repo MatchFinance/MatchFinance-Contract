@@ -41,7 +41,8 @@ describe("Match Pool", function () {
     const { 
       matchPool, manager,
       stakePool, mining, 
-      mintPool, stETH, 
+      mintPool, boost,
+      esLBR, stETH,
       admin, bob 
     } = await this.loadFixture(deployMPFixture);
 
@@ -51,6 +52,8 @@ describe("Match Pool", function () {
     this.mintPool = mintPool;
     this.stETH = stETH;
     this.manager = manager;
+    this.esLBR = esLBR;
+    this.boost = boost;
     this.admin = admin;
     this.bob = bob;
 
@@ -68,11 +71,13 @@ describe("Match Pool", function () {
       //< 0.7 * 4000/5000 = 0.56 >//
       await mineBlocks(1);
       //< 0.56 + 0.7 * 4200/5200 = 1.125 >//
-      separator();
-      log(await this.mining.earned(this.matchPool.address));
+      const lybraRecord = await this.mining.earned(this.matchPool.address);
       // As all mining reward goes to supplier
       // Admin reward (only supplier) = match pool reward
-      log(await this.manager.earned(this.admin.address, this.mining.address));
+      const managerRecord = await this.manager.earned(this.admin.address, this.mining.address);
+      log(managerRecord);
+      expect(managerRecord).to.be.lte(lybraRecord);
+      expect(managerRecord).to.be.closeTo(lybraRecord, 10);
     });
 
     it("should be correct after burning", async function () {
@@ -81,9 +86,11 @@ describe("Match Pool", function () {
       //< 0.7 * 4000/5000 = 0.56 >//
       await mineBlocks(1);
       //< 0.56 + 0.7 * 3800/4800 = 1.114 >//
-      separator();
-      log(await this.mining.earned(this.matchPool.address));
-      log(await this.manager.earned(this.admin.address, this.mining.address));
+      const lybraRecord = await this.mining.earned(this.matchPool.address);
+      const managerRecord = await this.manager.earned(this.admin.address, this.mining.address);
+      log(managerRecord);
+      expect(managerRecord).to.be.lte(lybraRecord);
+      expect(managerRecord).to.be.closeTo(lybraRecord, 10);
     });
 
     it("should be correct after depositing", async function () {
@@ -94,9 +101,30 @@ describe("Match Pool", function () {
       //< 3 * 0.7 * 4000/5000 = 1.68 >//
       await mineBlocks(1);
       //< 1.68 + 0.7 * 4200/5200 = 2.245 >//
+      const lybraRecord = await this.mining.earned(this.matchPool.address);
+      const managerRecord = await this.manager.earned(this.admin.address, this.mining.address);
+      log(managerRecord);
+      expect(managerRecord).to.be.lte(lybraRecord);
+      expect(managerRecord).to.be.closeTo(lybraRecord, 10);
+    });
+
+    it("should be correct after claiming reward", async function () {
+      await mineBlocks(10);
+      //< 10 * 0.7 * 4000/5000 = 5.6 >//
+      await this.manager.claimLybraRewards();
+      //< 0.56 + 0.7 * 4000/5000 = 6.16 >//
+      await mineBlocks(5);
+      //< 6.16 + 5 * 0.56 = 8.96 >//
       separator();
-      log(await this.mining.earned(this.matchPool.address));
+      const claimed = await this.esLBR.balanceOf(this.matchPool.address);
+      const earnedAfterClaim = (await this.mining.earned(this.matchPool.address))
+        .add(await this.stakePool.earned(this.matchPool.address));
+      const managerRecord = (await this.manager.earned(this.admin.address, this.mining.address))
+        .add(await this.manager.earned(this.admin.address, this.stakePool.address));
       log(await this.manager.earned(this.admin.address, this.mining.address));
+      expect(managerRecord).to.be.lte(claimed.add(earnedAfterClaim));
+      expect(managerRecord).to.be.closeTo(claimed.add(earnedAfterClaim), 10);
+    });
     });
   });
 

@@ -615,6 +615,8 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     }
 
     function claimRewards() external {
+        if (msg.sender != address(rewardManager)) revert Unauthorized();
+        
         ethlbrStakePool.getReward();
         IMining(lybraConfigurator.eUSDMiningIncentives()).getReward();
     }
