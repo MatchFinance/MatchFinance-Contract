@@ -16,6 +16,8 @@ import "../interfaces/LybraInterfaces.sol";
 contract MiningIncentive is Ownable {
     IConfigurator public immutable configurator;
     IMintPool public vault;
+    IEUSD public immutable esLBR;
+    IesLBRBoost public esLBRBoost;
 
     // Duration of rewards to be paid out (in seconds)
     uint256 public duration = 604_800;
@@ -46,10 +48,11 @@ contract MiningIncentive is Ownable {
     event ClaimedOtherEarnings(address indexed user, address indexed Victim, uint256 buyAmount, uint256 biddingFee, bool useEUSD, uint256 time);
     event NotifyRewardChanged(uint256 addAmount, uint256 time);
 
-    constructor(address _config, address _lpOracle, address _lbrOracle) {
+    constructor(address _config, address _lpOracle, address _lbrOracle, address _eslbr) {
         configurator = IConfigurator(_config);
         lpPriceFeed = AggregatorV3Interface(_lpOracle);
         lbrPriceFeed = AggregatorV3Interface(_lbrOracle);
+        esLBR = IEUSD(_eslbr);
     }
 
     modifier updateReward(address _account) {
@@ -62,6 +65,10 @@ contract MiningIncentive is Ownable {
             userUpdatedAt[_account] = block.timestamp;
         }
         _;
+    }
+
+    function setBoost(address _boost) external onlyOwner {
+        esLBRBoost = IesLBRBoost(_boost);
     }
 
     function setLpOracle(address _lpOracle) external onlyOwner {
@@ -147,8 +154,8 @@ contract MiningIncentive is Ownable {
      */
     function refreshReward(address _account) external updateReward(_account) {}
 
-    function getBoost(address _account) public pure returns (uint256) {
-        return 100 * 1e18;
+    function getBoost(address _account) public view returns (uint256) {
+        return 100 * 1e18 + esLBRBoost.getUserBoost(_account, userUpdatedAt[_account], finishAt);
     }
 
     function earned(address _account) public view returns (uint256) {
@@ -171,6 +178,7 @@ contract MiningIncentive is Ownable {
         uint256 reward = rewards[msg.sender];
         if (reward > 0) {
             rewards[msg.sender] = 0;
+            esLBR.mint(msg.sender, reward);
             emit ClaimReward(msg.sender, reward, block.timestamp);
         }
     }

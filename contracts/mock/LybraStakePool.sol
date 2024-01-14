@@ -5,10 +5,13 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
+import "../interfaces/LybraInterfaces.sol";
+
 contract StakePool is Ownable {
     using SafeERC20 for IERC20;
     // Immutable variables for staking and rewards tokens
     IERC20 public immutable stakingToken;
+    IEUSD public immutable rewardsToken;
 
     // Duration of rewards to be paid out (in seconds)
     uint256 public duration = 604_800;
@@ -39,8 +42,9 @@ contract StakePool is Ownable {
     event DurationChanged(uint256 duration, uint256 time);
     event BoostChanged(address boostAddr, uint256 time);
 
-    constructor(address _stakingToken) {
+    constructor(address _stakingToken, address _rewardToken) {
         stakingToken = IERC20(_stakingToken);
+        rewardsToken = IEUSD(_rewardToken);
     }
 
     // Update user's claimable reward data and record the timestamp.
@@ -102,7 +106,7 @@ contract StakePool is Ownable {
         uint256 reward = rewards[msg.sender];
         if (reward > 0) {
             rewards[msg.sender] = 0;
-            // rewardsToken.mint(msg.sender, reward);
+            rewardsToken.mint(msg.sender, reward);
             emit ClaimReward(msg.sender, reward, block.timestamp);
         }
     }

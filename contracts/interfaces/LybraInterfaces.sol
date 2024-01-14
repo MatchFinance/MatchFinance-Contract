@@ -37,9 +37,12 @@ interface IConfigurator {
 // eUSD mining incentive, dlp stake reward pool
 interface IRewardPool {
     function stakedOf(address user) external view returns (uint256);
+    function totalStaked() external view returns (uint256);
     function balanceOf(address user) external view returns (uint256);
     function getBoost(address _account) external view returns (uint256);
     function rewardPerToken() external view returns (uint256);
+    function earned(address _account) external view returns (uint256);
+    function refreshReward(address _account) external;
 }
 
 interface IEUSD {
@@ -97,5 +100,6 @@ interface IEUSD {
 
 interface IesLBRBoost {
     function setLockStatus(uint256 id, uint256 lbrAmount, bool useLBR) external;
+    function getUserBoost(address user, uint256 userUpdatedAt, uint256 finishAt) external view returns (uint256);
 }
 
