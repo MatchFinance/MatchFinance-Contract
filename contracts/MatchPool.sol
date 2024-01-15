@@ -558,9 +558,11 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     }
 
     /**
-     * @dev Assumes that dlp ratio is always > 3%
+     * @dev Assumes that dlp ratio is always > 3%.
+     *  Restrict to private so that when _mintEUSD()/_depositToLybra is invoked,
+     *  reward manager reward calculation must have been updated already.
      */
-    function mintEUSD() public {
+    function mintEUSD() private {
         address mintPoolAddress = address(getMintPool());
         uint256 tokenPrice = IMintPool(mintPoolAddress).getAssetPrice();
         uint256 _totalDeposited = totalDeposited[mintPoolAddress];
@@ -718,6 +720,8 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         return _lpTokenAmount * uint256(lpPrice) / 1e8;
     }
 
+    // !! Reward manager must be updated before any function that will change eUSD/peUSD mint amount !!
+
     function _depositNoCheck(uint256 _amount, uint256 _eUSDMintAmount) private {
         IMintPool mintPool = getMintPool();
         address mintPoolAddress = address(mintPool);
@@ -726,12 +730,9 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         uint256 allowance = stETH.allowance(address(this), mintPoolAddress);
         if (allowance < _amount) stETH.approve(mintPoolAddress, type(uint256).max);
 
-        if (_eUSDMintAmount > 0) {
-            rewardManager.lsdUpdateReward(address(0));
-            totalMinted[mintPoolAddress] += _eUSDMintAmount;
-        }
         mintPool.depositAssetToMint(_amount, _eUSDMintAmount);
         totalDeposited[mintPoolAddress] += _amount;
+        if (_eUSDMintAmount > 0) totalMinted[mintPoolAddress] += _eUSDMintAmount;
     }
 
     /**
@@ -739,7 +740,6 @@ contract MatchPool is Initializable, OwnableUpgradeable {
      */
     function _depositToLybra(uint256 _amount, uint256 _eUSDMintAmount) private {
         if (_amount < 1 ether) revert MinLybraDeposit();
-
         _depositNoCheck(_amount, _eUSDMintAmount);
     }
 
@@ -771,7 +771,6 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         IMintPool mintPool = getMintPool();
         address mintPoolAddress = address(mintPool);
 
-        rewardManager.lsdUpdateReward(address(0));
         mintPool.mint(address(this), _amount);
         totalMinted[mintPoolAddress] += _amount;
     }
@@ -780,7 +779,6 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         IMintPool mintPool = getMintPool();
         address mintPoolAddress = address(mintPool);
 
-        rewardManager.lsdUpdateReward(address(0));
         mintPool.burn(address(this), _amount);
         totalMinted[mintPoolAddress] -= _amount;
     }
@@ -798,6 +796,7 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     }
 
     function monitorDeposit(uint256 _amount, uint256 _eUSDMintAmount) external onlyMonitor {
+        if (_eUSDMintAmount > 0) rewardManager.lsdUpdateReward(address(0));
         _depositNoCheck(_amount, _eUSDMintAmount);
     }
 
@@ -810,10 +809,12 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     }
 
     function monitorMint(uint256 _amount) external onlyMonitor {
+        rewardManager.lsdUpdateReward(address(0));
         _mintEUSD(_amount);
     }
 
     function monitorBurn(uint256 _amount) external onlyMonitor {
+        rewardManager.lsdUpdateReward(address(0));
         _burnEUSD(_amount);
     }
 
