@@ -525,18 +525,22 @@ contract RewardManager is Initializable, OwnableUpgradeable {
         // Mint boost reward mesLBR to reward distributor
         // Reward token: mesLBR
         // Receiver: mesLBR staking contract
-        mesLBR.mint(
-            IRewardDistributorFactory(rewardDistributorFactory).distributors(address(mesLBR), address(mesLBRStaking)),
-            _boostReward
+        address boostReceiver = IRewardDistributorFactory(rewardDistributorFactory).distributors(
+            address(mesLBR),
+            address(mesLBRStaking)
         );
+        require(boostReceiver != address(0), "Invalid distributor");
+        mesLBR.mint(boostReceiver, _boostReward);
 
         // Transfer treasury reward to reward distributor for vlMatch staking
         // Reward token: mesLBR
         // Receiver: vlMatch staking contract
-        mesLBR.mint(
-            IRewardDistributorFactory(rewardDistributorFactory).distributors(address(mesLBR), vlMatchStaking),
-            _treasuryReward
+        address treasuryReceiver = IRewardDistributorFactory(rewardDistributorFactory).distributors(
+            address(mesLBR),
+            vlMatchStaking
         );
+        require(treasuryReceiver != address(0), "Invalid distributor");
+        mesLBR.mint(treasuryReceiver, _treasuryReward);
 
         // Transfer stablecoin protocol revenue to reward distributor
         address peUSD = lybraConfigurator.peUSD();
