@@ -13,6 +13,7 @@ interface IERC20Mintable {
 	function mint(address _to, uint256 _amount) external;
 }
 
+error Unauthorized();
 error UnpaidInterest(uint256 unpaidAmount);
 error RewardNotOpen();
 
@@ -88,7 +89,6 @@ contract RewardManager is Initializable, OwnableUpgradeable {
         // Seperate earned esLBR to two parts: normal and boost
         // Boost part goes to mesLBR stakers
         uint256 normalReward = (matchPoolShares * (rpt - rewardPerTokenPaid[_rewardPool])) / 1e18;
-        // if (_rewardPool == miningIncentive) console.log(matchPoolShares, rpt, rewardPerTokenPaid[_rewardPool], normalReward);
         uint256 totalReward = earnedFromLybra - earnedPaid[_rewardPool];
         uint256 boostReward = totalReward - normalReward;
 
@@ -142,104 +142,25 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 	}
 	
 	// Update rewards for dlp stakers, includes esLBR from dlp and eUSD
-	function dlpUpdateReward(address _account) public {
-		address _dlpRewardPool = dlpRewardPool;
-		address _miningIncentive = miningIncentive;
-
-		// esLBR earned from Lybra ETH-LBR LP stake reward pool
-        // !! @modify Code added by Eric 20231030
-        (uint256 dlpNormal, uint256 dlpRpt, uint256 boostReward, uint256 dlpEarned) = earnedSinceLastUpdate(_dlpRewardPool);
-		rewardPerTokenPaid[_dlpRewardPool] = dlpRpt;
-		earnedPaid[_dlpRewardPool] = dlpEarned;
-
-		uint256 toStaker;
-		if (_miningIncentive != address(0)) {
-			// esLBR earned from Lybra eUSD mining incentive
-            // !! @modify Code added by Eric 20231030
-            (uint256 lsdNormal, uint256 lsdRpt, uint256 boostRewardFromMining, uint256 lsdEarned) = earnedSinceLastUpdate(
-                _miningIncentive
-            );
-			rewardPerTokenPaid[_miningIncentive] = lsdRpt;
-			earnedPaid[_miningIncentive] = lsdEarned;
-
-			uint256 toTreasury = lsdNormal * treasuryShare / 100;
-			if (toTreasury > 0) userRewards[_miningIncentive][treasury] += toTreasury;
-			// esLBR reward from mining incentive given to dlp stakers
-			toStaker = lsdNormal * stakerShare / 100;
-			// esLBR reward from mining incentive given to stETH suppliers
-			uint256 toSupplier = lsdNormal - toTreasury - toStaker;
-
-			rewardPerTokenStored[_miningIncentive] = _rewardPerToken(_miningIncentive, toSupplier);
-
-			// !! @modify Code added by Eric 20231030
-            boostReward += boostRewardFromMining;
-		}
-
-		rewardPerTokenStored[_dlpRewardPool] = _rewardPerToken(_dlpRewardPool, dlpNormal + toStaker);
-
-		// !! @modify Code added by Eric 20231030
-        // !! @modify Code moved by Eric 20231228
-        pendingBoostReward += boostReward;
-
-		if (_account == address(0)) return;
-
-		userRewards[_dlpRewardPool][_account] = _earned(_account, _dlpRewardPool, 0);
-		userRewardsPerTokenPaid[_dlpRewardPool][_account] = rewardPerTokenStored[_dlpRewardPool];
+	function dlpUpdateReward(address _account) external {
+		// Boost multiplier obtained for calculating mining reward may not be the actual one 
+		// Lybra uses if only just reward manager is updated
+		if(msg.sender != address(matchPool)) revert Unauthorized();
+		_dlpUpdateReward(_account);
 	}
 
-	function lsdUpdateReward(address _account) public {
-		address _dlpRewardPool = dlpRewardPool;
-		address _miningIncentive = miningIncentive;
-
-		// esLBR earned from Lybra eUSD mining incentive
-        // !! @modify Code added by Eric 20231030
-        (uint256 lsdNormal, uint256 lsdRpt, uint256 boostReward, uint256 lsdEarned) = earnedSinceLastUpdate(_miningIncentive);
-		rewardPerTokenPaid[_miningIncentive] = lsdRpt;
-		earnedPaid[_miningIncentive] = lsdEarned;
-
-		if (lsdNormal > 0) {
-			uint256 toTreasury = lsdNormal * treasuryShare / 100;
-			if (toTreasury > 0) userRewards[_miningIncentive][treasury] += toTreasury;
-			// esLBR reward from mining incentive given to dlp stakers
-			uint256 toStaker = lsdNormal * stakerShare / 100;
-			// esLBR reward from mining incentive given to stETH suppliers
-			uint256 toSupplier = lsdNormal - toTreasury - toStaker;
-
-			rewardPerTokenStored[_dlpRewardPool] = _rewardPerToken(_dlpRewardPool, toStaker);
-			rewardPerTokenStored[_miningIncentive] = _rewardPerToken(_miningIncentive, toSupplier);
-		}
-
-		address _eUSD = eUSD;
-		uint256 eusdEarned = matchPool.claimRebase();
-		if (eusdEarned > 0) {
-			totalEUSD += eusdEarned;
-			rewardPerTokenStored[_eUSD] = _rewardPerToken(_eUSD, eusdEarned);
-		}
-
-		// !! @modify Code added by Eric 20231030
-        // !! @modify Code moved by Eric 20231228
-        pendingBoostReward += boostReward;
-
-		if (_account == address(0)) return;
-
-		userRewards[_miningIncentive][_account] = _earned(_account, _miningIncentive, 0);
-		userRewardsPerTokenPaid[_miningIncentive][_account] = rewardPerTokenStored[_miningIncentive];
-
-		if (eusdEarned > 0) {
-			(uint256 borrowedAmount,,,) = matchPool.borrowed(address(matchPool.getMintPool()), _account);
-			if (borrowedAmount == 0) userRewards[_eUSD][_account] = _earned(_account, _eUSD, 0);
-			// Users who borrowed eUSD will not share rebase reward
-			else userRewards[_eUSD][treasury] += (_earned(_account, _eUSD, 0) - userRewards[_eUSD][_account]);
-
-			userRewardsPerTokenPaid[_eUSD][_account] = rewardPerTokenStored[_eUSD];
-		}
+	function lsdUpdateReward(address _account) external {
+		// Boost multiplier obtained for calculating mining reward may not be the actual one 
+		// Lybra uses if only just reward manager is updated
+		if(msg.sender != address(matchPool)) revert Unauthorized();
+		_lsdUpdateReward(_account);
 	}
 
 	function claimLybraRewards() external {
 		// Calculate reward earned since last update till right before claiming.
 		// No need to update eUSD reward as claiming rewards from Lybra does not affect supply balances
 		// dlpUpdateReward() updates both dlp and mining incentive rewards
-		dlpUpdateReward(address(0));
+		_dlpUpdateReward(address(0));
 		matchPool.claimRewards();
 		earnedPaid[dlpRewardPool] = 0;
 		earnedPaid[miningIncentive] = 0;
@@ -319,5 +240,111 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 
 		return share * (_rewardPerToken(_rewardPool, _rewardAmount) - 
 			userRewardsPerTokenPaid[_rewardPool][_account]) / 1e18 + userRewards[_rewardPool][_account];
+	}
+
+	function _dlpUpdateReward(address _account) private {
+		address _dlpRewardPool = dlpRewardPool;
+		address _miningIncentive = miningIncentive;
+
+		// esLBR earned from Lybra ETH-LBR LP stake reward pool
+        // !! @modify Code added by Eric 20231030
+        (
+        	uint256 dlpNormal, 
+        	uint256 dlpRpt, 
+        	uint256 boostReward, 
+        	uint256 dlpEarned
+        ) = earnedSinceLastUpdate(_dlpRewardPool);
+		rewardPerTokenPaid[_dlpRewardPool] = dlpRpt;
+		earnedPaid[_dlpRewardPool] = dlpEarned;
+
+		uint256 toStaker;
+		if (_miningIncentive != address(0)) {
+			// esLBR earned from Lybra eUSD mining incentive
+            // !! @modify Code added by Eric 20231030
+            (
+            	uint256 lsdNormal, 
+            	uint256 lsdRpt, 
+            	uint256 boostRewardFromMining, 
+            	uint256 lsdEarned
+            ) = earnedSinceLastUpdate(_miningIncentive);
+			rewardPerTokenPaid[_miningIncentive] = lsdRpt;
+			earnedPaid[_miningIncentive] = lsdEarned;
+
+			uint256 toTreasury = lsdNormal * treasuryShare / 100;
+			if (toTreasury > 0) userRewards[_miningIncentive][treasury] += toTreasury;
+			// esLBR reward from mining incentive given to dlp stakers
+			toStaker = lsdNormal * stakerShare / 100;
+			// esLBR reward from mining incentive given to stETH suppliers
+			uint256 toSupplier = lsdNormal - toTreasury - toStaker;
+
+			rewardPerTokenStored[_miningIncentive] = _rewardPerToken(_miningIncentive, toSupplier);
+
+			// !! @modify Code added by Eric 20231030
+            boostReward += boostRewardFromMining;
+		}
+
+		rewardPerTokenStored[_dlpRewardPool] = _rewardPerToken(_dlpRewardPool, dlpNormal + toStaker);
+
+		// !! @modify Code added by Eric 20231030
+        // !! @modify Code moved by Eric 20231228
+        pendingBoostReward += boostReward;
+
+		if (_account == address(0)) return;
+
+		userRewards[_dlpRewardPool][_account] = _earned(_account, _dlpRewardPool, 0);
+		userRewardsPerTokenPaid[_dlpRewardPool][_account] = rewardPerTokenStored[_dlpRewardPool];
+	}
+
+	function _lsdUpdateReward(address _account) private {
+		address _dlpRewardPool = dlpRewardPool;
+		address _miningIncentive = miningIncentive;
+
+		// esLBR earned from Lybra eUSD mining incentive
+        // !! @modify Code added by Eric 20231030
+        (
+        	uint256 lsdNormal, 
+        	uint256 lsdRpt, 
+        	uint256 boostReward, 
+        	uint256 lsdEarned
+        ) = earnedSinceLastUpdate(_miningIncentive);
+		rewardPerTokenPaid[_miningIncentive] = lsdRpt;
+		earnedPaid[_miningIncentive] = lsdEarned;
+
+		if (lsdNormal > 0) {
+			uint256 toTreasury = lsdNormal * treasuryShare / 100;
+			if (toTreasury > 0) userRewards[_miningIncentive][treasury] += toTreasury;
+			// esLBR reward from mining incentive given to dlp stakers
+			uint256 toStaker = lsdNormal * stakerShare / 100;
+			// esLBR reward from mining incentive given to stETH suppliers
+			uint256 toSupplier = lsdNormal - toTreasury - toStaker;
+
+			rewardPerTokenStored[_dlpRewardPool] = _rewardPerToken(_dlpRewardPool, toStaker);
+			rewardPerTokenStored[_miningIncentive] = _rewardPerToken(_miningIncentive, toSupplier);
+		}
+
+		address _eUSD = eUSD;
+		uint256 eusdEarned = matchPool.claimRebase();
+		if (eusdEarned > 0) {
+			totalEUSD += eusdEarned;
+			rewardPerTokenStored[_eUSD] = _rewardPerToken(_eUSD, eusdEarned);
+		}
+
+		// !! @modify Code added by Eric 20231030
+        // !! @modify Code moved by Eric 20231228
+        pendingBoostReward += boostReward;
+
+		if (_account == address(0)) return;
+
+		userRewards[_miningIncentive][_account] = _earned(_account, _miningIncentive, 0);
+		userRewardsPerTokenPaid[_miningIncentive][_account] = rewardPerTokenStored[_miningIncentive];
+
+		if (eusdEarned > 0) {
+			(uint256 borrowedAmount,,,) = matchPool.borrowed(address(matchPool.getMintPool()), _account);
+			if (borrowedAmount == 0) userRewards[_eUSD][_account] = _earned(_account, _eUSD, 0);
+			// Users who borrowed eUSD will not share rebase reward
+			else userRewards[_eUSD][treasury] += (_earned(_account, _eUSD, 0) - userRewards[_eUSD][_account]);
+
+			userRewardsPerTokenPaid[_eUSD][_account] = rewardPerTokenStored[_eUSD];
+		}
 	}
 }
