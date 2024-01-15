@@ -3,7 +3,7 @@ import { expect } from "chai";
 import { ethers } from "hardhat";
 
 import { deployMPFixture } from "./MatchPool.fixture";
-import { toWei, fromWei, mineBlocks } from "./utils";
+import { toWei, fromWei, mineBlocks, zeroAddress } from "./utils";
 
 async function logPoolInfo(contract) {
   console.log("\nTotal dlp Staked: ", fromWei(await contract.totalStaked()));
@@ -115,7 +115,6 @@ describe("Match Pool", function () {
       //< 0.56 + 0.7 * 4000/5000 = 6.16 >//
       await mineBlocks(5);
       //< 6.16 + 5 * 0.56 = 8.96 >//
-      separator();
       const claimed = await this.esLBR.balanceOf(this.matchPool.address);
       const earnedAfterClaim = (await this.mining.earned(this.matchPool.address))
         .add(await this.stakePool.earned(this.matchPool.address));
@@ -125,6 +124,39 @@ describe("Match Pool", function () {
       expect(managerRecord).to.be.lte(claimed.add(earnedAfterClaim));
       expect(managerRecord).to.be.closeTo(claimed.add(earnedAfterClaim), 10);
     });
+
+    it("should be correct with changing boost multiplier", async function () {
+      await mineBlocks(100);
+      await this.manager.claimLybraRewards();
+      await mineBlocks(8);
+      // esLBR total supply = 124.56, ~1.2x
+      await this.matchPool.boostReward(3, toWei("40"));
+      //< 110 * 0.7 * 4000/5000 = 61.6 >//
+      const oldBoost = await this.mining.getBoost(this.matchPool.address);
+      const boostScale = toWei("100");
+      await mineBlocks(10);
+      // Boost reward ~= 10 * 0.56 * 1.2 - 10 * 0.56 ~= 1.12
+      const normalReward = toWei("5.6")
+      let boostReward = normalReward.mul(oldBoost).div(boostScale).sub(normalReward);
+      let managerRecordBoost = (await this.manager.earnedSinceLastUpdate(this.mining.address))[2];
+      log(managerRecordBoost);
+      expect(managerRecordBoost).to.equal(boostReward);
+
+      // ~1.3x
+      await this.matchPool.boostReward(3, toWei("20"));
+      const newBoost = await this.mining.getBoost(this.matchPool.address);
+      await this.matchPool.supplyETH({ value: toWei("0.5") }); // invoke lsdUpdateReward()
+      expect(await this.manager.pendingBoostReward()).to.be.closeTo(managerRecordBoost
+        // Reward earned when calling boostReward()
+        .add(toWei("0.56").mul(oldBoost).div(boostScale).sub(toWei("0.56")))
+        // Reward earned when calling lsdUpdateReward()
+        .add(toWei("0.56").mul(newBoost).div(boostScale).sub(toWei("0.56"))), 10
+      );
+      await mineBlocks(10);
+      boostReward = normalReward.mul(newBoost).div(boostScale).sub(normalReward);
+      managerRecordBoost = (await this.manager.earnedSinceLastUpdate(this.mining.address))[2];
+      log(managerRecordBoost);
+      expect(managerRecordBoost).to.equal(boostReward);
     });
   });
 
