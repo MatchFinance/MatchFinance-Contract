@@ -83,7 +83,12 @@ contract RewardManager is Initializable, OwnableUpgradeable {
     event DLPRewardClaimed(address account, uint256 rewardAmount);
     event LSDRewardClaimed(address account, uint256 rewardAmount);
     event eUSDRewardClaimed(address account, uint256 rewardAmount);
-    event RewardDistributedToDistributors(uint256 boostReward, uint256 treasuryReward, uint256 protocolRevenue);
+    event RewardDistributedToDistributors(
+        uint256 boostReward,
+        uint256 treasuryReward,
+        uint256 peUSDAmount,
+        uint256 altStablecoinAmount
+    );
 
     modifier nonReentrant() {
         _nonReentrantBefore();
@@ -543,34 +548,24 @@ contract RewardManager is Initializable, OwnableUpgradeable {
         // ! Transfer all peUSD and altStablecoin to their distributors
         // ! It seems proper for now
         // ! All peUSD and altStablecoin inside this contract is from protocol revenue
-        IERC20(peUSD).transfer(
-            IRewardDistributorFactory(rewardDistributorFactory).distributors(peUSD, address(mesLBRStaking)),
-            peUSDBalance
+        // ! --------------------
+        // ! 20240112 Need to ensure the distributor contract exists or we will transfer to zero address
+        // ! If Lybra changes the altStablecoin we need to add a new distributor (no change in this contract)
+        address peUSDReceiver = IRewardDistributorFactory(rewardDistributorFactory).distributors(
+            peUSD,
+            address(mesLBRStaking)
         );
-        IERC20(altStablecoin).transfer(
-            IRewardDistributorFactory(rewardDistributorFactory).distributors(altStablecoin, address(mesLBRStaking)),
-            altStablecoinBalance
+        require(peUSDReceiver != address(0), "No peUSD distributor");
+        IERC20(peUSD).transfer(peUSDReceiver, peUSDBalance);
+
+        address altStablecoinReceiver = IRewardDistributorFactory(rewardDistributorFactory).distributors(
+            altStablecoin,
+            address(mesLBRStaking)
         );
+        require(altStablecoinReceiver != address(0), "No altStablecoin distributor");
+        IERC20(altStablecoin).transfer(altStablecoinReceiver, altStablecoinBalance);
 
-        emit RewardDistributedToDistributors(_boostReward, _treasuryReward, peUSDBalance + altStablecoinBalance);
-    }
-
-    /**
-     * @notice Get pending reward in a specific distributor
-     *         The caller should be the staking pools
-     */
-    function pendingRewardInDistributor(address _rewardToken, address _receiver) external view returns (uint256) {
-        return IRewardDistributorFactory(rewardDistributorFactory).pendingReward(_rewardToken, _receiver);
-    }
-
-    function distributeRewardFromDistributor(address _rewardToken) external returns (uint256) {
-        revert WIP();
-        // Reward receiver is the caller
-        address receiver = msg.sender;
-        require(receiver == address(mesLBRStaking) || receiver == vlMatchStaking, "Invalid receiver");
-
-        // Distribute the reward and return the amount that has been distributed
-        return IRewardDistributorFactory(rewardDistributorFactory).distribute(_rewardToken, receiver);
+        emit RewardDistributedToDistributors(_boostReward, _treasuryReward, peUSDBalance, altStablecoinBalance);
     }
 
     function getAllRewards(bool _stakeNow) external {

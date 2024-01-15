@@ -36,6 +36,14 @@ export const storeMTokenImplList = function (addressList: object) {
   fs.writeFileSync("info/mTokenImpl.json", JSON.stringify(addressList, null, "\t"));
 };
 
+export const readDistributorList = function () {
+  return JSON.parse(fs.readFileSync("info/distributors.json", "utf-8"));
+};
+
+export const storeDistributorList = function (addressList: object) {
+  fs.writeFileSync("info/distributors.json", JSON.stringify(addressList, null, "\t"));
+};
+
 ///
 /// Deployment args record
 ///

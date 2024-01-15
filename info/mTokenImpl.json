@@ -1,6 +1,8 @@
 {
 	"mainnet": {
-		"mesLBR": "0x0D89818e8Cfb2bCD0203Cbd450D8ea6bE013c6C2"
+		"mesLBR": "0x0D89818e8Cfb2bCD0203Cbd450D8ea6bE013c6C2",
+		"RewardDistributorFactory": "0x2fD174c6C38c2072E756490dBFa79b0AB8dD3e67",
+		"MTokenStaking": "0x505C526cC0F620B40589c13249ebE1Db29E13EAA"
 	},
 	"sepolia": {},
 	"localhost": {}

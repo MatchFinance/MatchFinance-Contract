@@ -24,10 +24,10 @@ contract RewardDistributorFactory is OwnableUpgradeable {
     // ************************************* Variables **************************************** //
     // ---------------------------------------------------------------------------------------- //
 
-    address public manager;
-
     // Reward token => Receiver => Distributor
     mapping(address rewardToken => mapping(address receiver => address distributor)) public distributors;
+
+    mapping(address receiver => bool isValid) public isValidReceiver;
 
     // ---------------------------------------------------------------------------------------- //
     // *************************************** Events ***************************************** //
@@ -39,20 +39,10 @@ contract RewardDistributorFactory is OwnableUpgradeable {
     // ************************************* Initialize *************************************** //
     // ---------------------------------------------------------------------------------------- //
 
-    function initialize(address _manager) public initializer {
+    function initialize() public initializer {
         __Ownable_init();
-
-        manager = _manager;
     }
 
-    // ---------------------------------------------------------------------------------------- //
-    // ************************************* Modifiers **************************************** //
-    // ---------------------------------------------------------------------------------------- //
-
-    modifier onlyManager() {
-        require(msg.sender == manager, "Only manager can call");
-        _;
-    }
 
     // ---------------------------------------------------------------------------------------- //
     // ************************************ View Functions ************************************ //
@@ -89,10 +79,24 @@ contract RewardDistributorFactory is OwnableUpgradeable {
 
         distributors[_rewardToken][_receiver] = address(newDistributor);
 
+        isValidReceiver[_receiver] = true;
+
         emit NewDistributorDeployed(_rewardToken, _receiver, address(newDistributor));
     }
 
-    function distribute(address _rewardToken, address _receiver) external onlyManager returns (uint256) {
+    function distribute(address _rewardToken) external returns (uint256) {
+        // Only called by distributors
+        address receiver = msg.sender;
+        require(isValidReceiver[receiver], "Invalid caller to distribute");
+
+        address distributorAddress = distributors[_rewardToken][receiver];
+        require(distributorAddress != address(0), "Distributor not exist");
+
+        RewardDistributorV2 distributor = RewardDistributorV2(distributorAddress);
+        return distributor.distribute();
+    }
+
+    function ownerDistribute(address _rewardToken, address _receiver) external onlyOwner returns (uint256) {
         address distributorAddress = distributors[_rewardToken][_receiver];
         require(distributorAddress != address(0), "Distributor not exist");
 

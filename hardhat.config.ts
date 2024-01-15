@@ -8,6 +8,7 @@ import type { NetworkUserConfig } from "hardhat/types";
 import { resolve } from "path";
 
 import "./tasks";
+import "./tasks/mStaking";
 
 const dotenvConfigPath: string = process.env.DOTENV_CONFIG_PATH || "./.env";
 dotenvConfig({ path: resolve(__dirname, dotenvConfigPath) });
@@ -52,7 +53,8 @@ function getChainConfig(chain: keyof typeof chainIds): NetworkUserConfig {
       break;
     default:
       jsonRpcUrl = "https://" + chain + ".infura.io/v3/" + infuraApiKey;
-      // jsonRpcUrl = "https://mainnet.gateway.tenderly.co/"  (my tenderly gateway)
+      // jsonRpcUrl = "https://mainnet.gateway.tenderly.co/" + process.env.TENDERLY_RPC;
+    // (my tenderly gateway)
   }
   return {
     accounts: [`${privateKey}`],
