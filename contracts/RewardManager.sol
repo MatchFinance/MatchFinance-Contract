@@ -140,6 +140,16 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 	function setMesLBR(address _mesLBR) external onlyOwner {
 		mesLBR = IERC20Mintable(_mesLBR);
 	}
+
+	function varInitialize() external onlyOwner {
+    	address _dlpRewardPool = dlpRewardPool;
+    	address _mining = miningIncentive;
+    	address _matchPool = address(matchPool);
+    	rewardPerTokenPaid[_dlpRewardPool] = IRewardPool(_dlpRewardPool).rewardPerToken();
+    	earnedPaid[_dlpRewardPool] = IRewardPool(_dlpRewardPool).earned(_matchPool);
+    	rewardPerTokenPaid[_mining] = IRewardPool(_mining).rewardPerToken();
+    	earnedPaid[_mining] = IRewardPool(_mining).earned(_matchPool);
+    }
 	
 	// Update rewards for dlp stakers, includes esLBR from dlp and eUSD
 	function dlpUpdateReward(address _account) external {
@@ -164,6 +174,13 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 		matchPool.claimRewards();
 		earnedPaid[dlpRewardPool] = 0;
 		earnedPaid[miningIncentive] = 0;
+	}
+
+	function claimTreasury() external onlyOwner {
+		address _treasury = treasury;
+		uint256 rewardToTreasury = userRewards[miningIncentive][_treasury];
+		userRewards[miningIncentive][_treasury] = 0;
+		mesLBR.mint(_treasury, rewardToTreasury);
 	}
 
 	// function getReward(address _rewardPool) public {
