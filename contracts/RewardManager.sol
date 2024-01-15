@@ -48,11 +48,11 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 
 	IERC20Mintable public mesLBR;
 
-	// reward pool => last updated earned() amount from Lybra
-	mapping(address => uint256) public earnedPaid;
-
 	// !! @modify Eric 20231030
     uint256 public pendingBoostReward;
+
+    // reward pool => last updated earned() amount from Lybra
+	mapping(address => uint256) public earnedPaid;
 
 	event RewardShareChanged(uint128 newTreasuryShare, uint128 newStakerShare);
 	event DLPRewardClaimed(address account, uint256 rewardAmount);
