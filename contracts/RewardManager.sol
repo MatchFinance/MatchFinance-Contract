@@ -54,7 +54,11 @@ contract RewardManager is Initializable, OwnableUpgradeable {
     // reward pool => last updated earned() amount from Lybra
 	mapping(address => uint256) public earnedPaid;
 
+	event dlpRewardPoolChanged(address newPool);
+	event MiningRewardPoolsChanged(address newMining, address newEUSD);
 	event RewardShareChanged(uint128 newTreasuryShare, uint128 newStakerShare);
+	event TreasuryChanged(address newTreasury);
+	event mesLBRChanged(address newMesLBR);
 	event DLPRewardClaimed(address account, uint256 rewardAmount);
 	event LSDRewardClaimed(address account, uint256 rewardAmount);
 	event eUSDRewardClaimed(address account, uint256 rewardAmount);
@@ -119,11 +123,15 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 
 	function setDlpRewardPool(address _dlp) external onlyOwner {
 		dlpRewardPool = _dlp;
+
+		emit dlpRewardPoolChanged(_dlp);
 	}
 
 	function setMiningRewardPools(address _mining, address _eUSD) external onlyOwner {
 		miningIncentive = _mining;
 		eUSD = _eUSD;
+
+		emit MiningRewardPoolsChanged(_mining, _eUSD);
 	}
 
 	function setMiningRewardShares(uint128 _treasuryShare, uint128 _stakerShare) public onlyOwner {
@@ -135,20 +143,19 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 
 	function setTreasury(address _treasury) external onlyOwner {
 		treasury = _treasury;
+
+		emit TreasuryChanged(_treasury);
 	}
 
 	function setMesLBR(address _mesLBR) external onlyOwner {
 		mesLBR = IERC20Mintable(_mesLBR);
+
+		emit mesLBRChanged(_mesLBR);
 	}
 
 	function varInitialize() external onlyOwner {
-    	address _dlpRewardPool = dlpRewardPool;
-    	address _mining = miningIncentive;
-    	address _matchPool = address(matchPool);
-    	rewardPerTokenPaid[_dlpRewardPool] = IRewardPool(_dlpRewardPool).rewardPerToken();
-    	earnedPaid[_dlpRewardPool] = IRewardPool(_dlpRewardPool).earned(_matchPool);
-    	rewardPerTokenPaid[_mining] = IRewardPool(_mining).rewardPerToken();
-    	earnedPaid[_mining] = IRewardPool(_mining).earned(_matchPool);
+    	// tx 0xacf569aae8ffd2202cfdeaf517151db5b17a72651fceeb5ed9dadea47558bda0 skipped eUSD reward update
+    	userRewards[eUSD][0x2A52F2e021808f27b821Ff24204cE0a00b631e20] = 44854693994177419772;
     }
 	
 	// Update rewards for dlp stakers, includes esLBR from dlp and eUSD
@@ -355,13 +362,11 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 		userRewards[_miningIncentive][_account] = _earned(_account, _miningIncentive, 0);
 		userRewardsPerTokenPaid[_miningIncentive][_account] = rewardPerTokenStored[_miningIncentive];
 
-		if (eusdEarned > 0) {
-			(uint256 borrowedAmount,,,) = matchPool.borrowed(address(matchPool.getMintPool()), _account);
-			if (borrowedAmount == 0) userRewards[_eUSD][_account] = _earned(_account, _eUSD, 0);
+		(uint256 borrowedAmount,,,) = matchPool.borrowed(address(matchPool.getMintPool()), _account);
+		if (borrowedAmount == 0) userRewards[_eUSD][_account] = _earned(_account, _eUSD, 0);
 			// Users who borrowed eUSD will not share rebase reward
-			else userRewards[_eUSD][treasury] += (_earned(_account, _eUSD, 0) - userRewards[_eUSD][_account]);
+		else userRewards[_eUSD][treasury] += (_earned(_account, _eUSD, 0) - userRewards[_eUSD][_account]);
 
-			userRewardsPerTokenPaid[_eUSD][_account] = rewardPerTokenStored[_eUSD];
-		}
+		userRewardsPerTokenPaid[_eUSD][_account] = rewardPerTokenStored[_eUSD];
 	}
 }
