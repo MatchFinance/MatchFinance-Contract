@@ -11,6 +11,8 @@ interface IStakePool {
     function stake(uint256 _amount) external;
     function withdraw(uint256 _amount) external;
     function getReward() external;
+    // Get esLBR address from dlp stake pool
+    function rewardsToken() external view returns (address);
 }
 
 interface IMintPool {

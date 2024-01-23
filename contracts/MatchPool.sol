@@ -7,6 +7,7 @@ import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/O
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/governance/utils/IVotes.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 import "./interfaces/LybraInterfaces.sol";
@@ -264,6 +265,14 @@ contract MatchPool is Initializable, OwnableUpgradeable {
     function addMintPool(address _mintPool) external onlyOwner {
         mintPools.push(IMintPool(_mintPool));
         emit MintPoolAdded(_mintPool);
+    }
+
+    function boostReward(uint256 _settingId, uint256 _amount) external onlyOwner {
+        esLBRBoost.setLockStatus(_settingId, _amount, false);
+    }
+
+    function delegateVote(address _delegatee) external onlyOwner {
+        IVotes(ethlbrStakePool.rewardsToken()).delegate(_delegatee);
     }
     
     // function zap() external payable {
@@ -621,10 +630,6 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         
         ethlbrStakePool.getReward();
         IMining(lybraConfigurator.eUSDMiningIncentives()).getReward();
-    }
-
-    function boostReward(uint256 _settingId, uint256 _amount) external onlyOwner {
-        esLBRBoost.setLockStatus(_settingId, _amount, false);
     }
 
     /**
