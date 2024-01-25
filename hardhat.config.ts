@@ -52,8 +52,8 @@ function getChainConfig(chain: keyof typeof chainIds): NetworkUserConfig {
       jsonRpcUrl = "https://bsc-dataseed1.binance.org";
       break;
     default:
-      jsonRpcUrl = "https://" + chain + ".infura.io/v3/" + infuraApiKey;
-      // jsonRpcUrl = "https://mainnet.gateway.tenderly.co/" + process.env.TENDERLY_RPC;
+      // jsonRpcUrl = "https://" + chain + ".infura.io/v3/" + infuraApiKey;
+      jsonRpcUrl = "https://mainnet.gateway.tenderly.co/" + process.env.TENDERLY_RPC;
     // (my tenderly gateway)
   }
   return {
