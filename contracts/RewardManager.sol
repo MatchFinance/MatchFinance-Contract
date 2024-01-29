@@ -59,8 +59,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 	event RewardShareChanged(uint128 newTreasuryShare, uint128 newStakerShare);
 	event TreasuryChanged(address newTreasury);
 	event mesLBRChanged(address newMesLBR);
-	event DLPRewardClaimed(address account, uint256 rewardAmount);
-	event LSDRewardClaimed(address account, uint256 rewardAmount);
+	event mesLBRRewardClaimed(address account, uint256 rewardAmount);
 	event eUSDRewardClaimed(address account, uint256 rewardAmount);
 
 	function initializeTest(address _matchPool) public initializer {
@@ -80,9 +79,8 @@ contract RewardManager is Initializable, OwnableUpgradeable {
         uint256 matchPoolShares;
 
         // DLP reward pool is calculated with the staked amount of "DLP"
-        if (_rewardPool == dlpRewardPool)
-            matchPoolShares = rewardPool.balanceOf(_matchPool);
-            // eUSD mining incentive pool is calculated with the total borrowed(minted) amount of eUSD or peUSD
+        if (_rewardPool == dlpRewardPool) matchPoolShares = rewardPool.balanceOf(_matchPool);
+        // eUSD mining incentive pool is calculated with the total borrowed(minted) amount of eUSD or peUSD
         else if (_rewardPool == miningIncentive) matchPoolShares = rewardPool.stakedOf(_matchPool);
         else return (0, 0, 0, 0);
 
@@ -106,7 +104,9 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 		(uint256 lsdEarned, , , ) = earnedSinceLastUpdate(miningIncentive);
 		uint256 rewardAmount;
 		if (_rewardPool == dlpRewardPool) rewardAmount = dlpEarned + lsdEarned * stakerShare / 100;
-		else if (_rewardPool == miningIncentive) rewardAmount = lsdEarned * (100 - stakerShare - treasuryShare) / 100;
+		else if (_rewardPool == miningIncentive) 
+			rewardAmount = lsdEarned * (100 - stakerShare - treasuryShare) / 100;
+		else return 0;
 
 		return _rewardPerToken(_rewardPool, rewardAmount);
 	}
@@ -116,9 +116,11 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 		(uint256 lsdEarned, , , ) = earnedSinceLastUpdate(miningIncentive);
 		uint256 rewardAmount;
 		if (_rewardPool == dlpRewardPool) rewardAmount = dlpEarned + lsdEarned * stakerShare / 100;
-		else if (_rewardPool == miningIncentive) rewardAmount = lsdEarned * (100 - stakerShare - treasuryShare) / 100;
+		else if (_rewardPool == miningIncentive) 
+			rewardAmount = lsdEarned * (100 - stakerShare - treasuryShare) / 100;
+		else return 0;
 
-		return _earned(_account, _rewardPool, rewardAmount);
+		return _earned(_rewardPool, _account, rewardAmount);
 	}
 
 	function setDlpRewardPool(address _dlp) external onlyOwner {
@@ -152,11 +154,6 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 
 		emit mesLBRChanged(_mesLBR);
 	}
-
-	function varInitialize() external onlyOwner {
-    	// tx 0xacf569aae8ffd2202cfdeaf517151db5b17a72651fceeb5ed9dadea47558bda0 skipped eUSD reward update
-    	userRewards[eUSD][0x2A52F2e021808f27b821Ff24204cE0a00b631e20] = 44854693994177419772;
-    }
 	
 	// Update rewards for dlp stakers, includes esLBR from dlp and eUSD
 	function dlpUpdateReward(address _account) external {
@@ -171,6 +168,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 		// Lybra uses if only just reward manager is updated
 		if(msg.sender != address(matchPool)) revert Unauthorized();
 		_lsdUpdateReward(_account);
+		_eusdUpdateReward(_account);
 	}
 
 	function claimLybraRewards() external {
@@ -190,77 +188,103 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 		mesLBR.mint(_treasury, rewardToTreasury);
 	}
 
-	// function getReward(address _rewardPool) public {
-	// 	if (address(mesLBR) == address(0)) revert RewardNotOpen();
+	function getReward(address _rewardPool) external {
+		if (address(mesLBR) == address(0)) revert RewardNotOpen();
+		
+		address _dlpRewardPool = dlpRewardPool;
+		address _miningIncentive = miningIncentive;
+		uint256 rewardAmount;
+ 
+		if (_rewardPool == dlpRewardPool) {
+			_dlpUpdateReward(msg.sender);
 
-	// 	// Cannot claim rewards if has not fully repaid eUSD interest
-	// 	// due to borrowing when above { globalBorrowRatioThreshold }
-	// 	(,, uint256 unpaidInterest,) = matchPool.borrowed(address(matchPool.getMintPool()), msg.sender);
-	// 	if (unpaidInterest > 0) revert UnpaidInterest(unpaidInterest);
+			rewardAmount = userRewards[_dlpRewardPool][msg.sender];
+			if (rewardAmount > 0) {
+				userRewards[_dlpRewardPool][msg.sender] = 0;
+				mesLBR.mint(msg.sender, rewardAmount);
+				emit mesLBRRewardClaimed(msg.sender, rewardAmount);
+			}
 
-	// 	address _dlpRewardPool = dlpRewardPool;
-	// 	address _miningIncentive = miningIncentive;
-	// 	uint256 rewardAmount;
+			return;
+		}
 
-	// 	if (_rewardPool == _dlpRewardPool) {
-	// 		dlpUpdateReward(msg.sender);
+		if (_rewardPool == _miningIncentive) {
+			_lsdUpdateReward(msg.sender);
+			_eusdUpdateReward(msg.sender);
 
-	// 		rewardAmount = userRewards[_dlpRewardPool][msg.sender];
-	// 		if (rewardAmount > 0) {
-	// 			userRewards[_dlpRewardPool][msg.sender] = 0;
-	// 			mesLBR.mint(msg.sender, rewardAmount);
-	// 			emit DLPRewardClaimed(msg.sender, rewardAmount);
-	// 		}
+			rewardAmount = userRewards[_miningIncentive][msg.sender];
+			if (rewardAmount > 0) {
+				userRewards[_miningIncentive][msg.sender] = 0;
+				mesLBR.mint(msg.sender, rewardAmount);
+				emit mesLBRRewardClaimed(msg.sender, rewardAmount);
+			}
 
-	// 		return;
-	// 	}
+			rewardAmount = userRewards[eUSD][msg.sender];
+			if (rewardAmount > 0) {
+				IERC20 _eUSD = IERC20(eUSD);
+				// Get actual claim amount, including newly rebased eUSD in this contract
+				uint256 actualAmount = _eUSD.balanceOf(address(this)) * userRewards[eUSD][msg.sender] / totalEUSD;
+				userRewards[eUSD][msg.sender] = 0;
+				totalEUSD -= rewardAmount;
 
-	// 	if (_rewardPool == _miningIncentive) {
-	// 		lsdUpdateReward(msg.sender);
+				_eUSD.transfer(msg.sender, actualAmount);
+				emit eUSDRewardClaimed(msg.sender, rewardAmount);
+			}
 
-	// 		rewardAmount = userRewards[_miningIncentive][msg.sender];
-	// 		if (rewardAmount > 0) {
-	// 			userRewards[_miningIncentive][msg.sender] = 0;
-	// 			mesLBR.mint(msg.sender, rewardAmount);
-	// 			emit LSDRewardClaimed(msg.sender, rewardAmount);
-	// 		}
+			return;
+		}
+	}
 
-	// 		rewardAmount = userRewards[eUSD][msg.sender];
-	// 		if (rewardAmount > 0) {
-	// 			IERC20 _eUSD = IERC20(eUSD);
-	// 			// Get actual claim amount, including newly rebased eUSD in this contract
-	// 			uint256 actualAmount = _eUSD.balanceOf(address(this)) * userRewards[eUSD][msg.sender] / totalEUSD;
-	// 			userRewards[eUSD][msg.sender] = 0;
-	// 			totalEUSD -= rewardAmount;
+	function getAllRewards() external {
+		if (address(mesLBR) == address(0)) revert RewardNotOpen();
 
-	// 			_eUSD.transfer(msg.sender, actualAmount);
-	// 			emit eUSDRewardClaimed(msg.sender, rewardAmount);
-	// 		}
+		address _dlpRewardPool = dlpRewardPool;
+		address _miningIncentive = miningIncentive;
+		// Update dlp & mining global var, dlp user var
+		_dlpUpdateReward(msg.sender);
+		// Update mining user var
+		_updateUserVar(_miningIncentive, msg.sender);
+		// Update eUSD global var & user var
+		_eusdUpdateReward(msg.sender);
 
-	// 		return;
-	// 	}
-	// }
+		uint256 rewardAmount = (userRewards[_dlpRewardPool][msg.sender] +
+			userRewards[_miningIncentive][msg.sender]);
+		userRewards[_dlpRewardPool][msg.sender] = 0;
+		userRewards[_miningIncentive][msg.sender] = 0;
+		mesLBR.mint(msg.sender, rewardAmount);
+		emit mesLBRRewardClaimed(msg.sender, rewardAmount);
 
-	// function getAllRewards() external {
-	// 	getReward(dlpRewardPool);
-	// 	getReward(miningIncentive);
-	// }
+		rewardAmount = userRewards[eUSD][msg.sender];
+		IERC20 _eUSD = IERC20(eUSD);
+		// Get actual claim amount, including newly rebased eUSD in this contract
+		uint256 actualAmount = _eUSD.balanceOf(address(this)) * userRewards[eUSD][msg.sender] / totalEUSD;
+		userRewards[eUSD][msg.sender] = 0;
+		totalEUSD -= rewardAmount;
+		_eUSD.transfer(msg.sender, actualAmount);
+		emit eUSDRewardClaimed(msg.sender, rewardAmount);
+	}
 
 	function _rewardPerToken(address _rewardPool, uint256 _rewardAmount) private view returns (uint256) {
 		uint256 rptStored = rewardPerTokenStored[_rewardPool];
 		uint256 totalToken;
 		if (_rewardPool == dlpRewardPool) totalToken = matchPool.totalStaked();
 		// Support only stETH for version 1
-		if (_rewardPool == miningIncentive || _rewardPool == eUSD) totalToken = matchPool.totalSupplied(address(matchPool.getMintPool()));
+		if (_rewardPool == miningIncentive || _rewardPool == eUSD) 
+			totalToken = matchPool.totalSupplied(address(matchPool.getMintPool()));
 
 		return totalToken > 0 ? rptStored + _rewardAmount * 1e18 / totalToken : rptStored;
 	}
 
-	function _earned(address _account, address _rewardPool, uint256 _rewardAmount) private view returns (uint256) {
+	function _earned(
+		address _rewardPool,
+		address _account,
+		uint256 _rewardAmount
+	) private view returns (uint256) {
 		uint256 share;
 		if (_rewardPool == dlpRewardPool) share = matchPool.staked(_account);
 		// Support only stETH for version 1
-		if (_rewardPool == miningIncentive || _rewardPool == eUSD) share = matchPool.supplied(address(matchPool.getMintPool()), _account);
+		if (_rewardPool == miningIncentive || _rewardPool == eUSD) 
+			share = matchPool.supplied(address(matchPool.getMintPool()), _account);
 
 		return share * (_rewardPerToken(_rewardPool, _rewardAmount) - 
 			userRewardsPerTokenPaid[_rewardPool][_account]) / 1e18 + userRewards[_rewardPool][_account];
@@ -270,53 +294,22 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 		address _dlpRewardPool = dlpRewardPool;
 		address _miningIncentive = miningIncentive;
 
-		// esLBR earned from Lybra ETH-LBR LP stake reward pool
-        // !! @modify Code added by Eric 20231030
-        (
-        	uint256 dlpNormal, 
-        	uint256 dlpRpt, 
-        	uint256 boostReward, 
-        	uint256 dlpEarned
-        ) = earnedSinceLastUpdate(_dlpRewardPool);
-		rewardPerTokenPaid[_dlpRewardPool] = dlpRpt;
-		earnedPaid[_dlpRewardPool] = dlpEarned;
+		(uint256 dlpNormal, uint256 dlpBoost) = _updateGlobalVar(_dlpRewardPool);
+		(uint256 lsdNormal, uint256 lsdBoost) = _updateGlobalVar(_miningIncentive);
 
-		uint256 toStaker;
-		if (_miningIncentive != address(0)) {
-			// esLBR earned from Lybra eUSD mining incentive
-            // !! @modify Code added by Eric 20231030
-            (
-            	uint256 lsdNormal, 
-            	uint256 lsdRpt, 
-            	uint256 boostRewardFromMining, 
-            	uint256 lsdEarned
-            ) = earnedSinceLastUpdate(_miningIncentive);
-			rewardPerTokenPaid[_miningIncentive] = lsdRpt;
-			earnedPaid[_miningIncentive] = lsdEarned;
-
-			uint256 toTreasury = lsdNormal * treasuryShare / 100;
-			if (toTreasury > 0) userRewards[_miningIncentive][treasury] += toTreasury;
-			// esLBR reward from mining incentive given to dlp stakers
-			toStaker = lsdNormal * stakerShare / 100;
-			// esLBR reward from mining incentive given to stETH suppliers
-			uint256 toSupplier = lsdNormal - toTreasury - toStaker;
+		if (lsdNormal > 0) {
+			(uint256 toStaker, uint256 toSupplier) = _calcRewardShares(lsdNormal);
+			dlpNormal += toStaker;
 
 			rewardPerTokenStored[_miningIncentive] = _rewardPerToken(_miningIncentive, toSupplier);
 
-			// !! @modify Code added by Eric 20231030
-            boostReward += boostRewardFromMining;
+			// dLP stake pool does not have boost reward
+	        pendingBoostReward += lsdBoost;
 		}
 
-		rewardPerTokenStored[_dlpRewardPool] = _rewardPerToken(_dlpRewardPool, dlpNormal + toStaker);
+		if (dlpNormal > 0) rewardPerTokenStored[_dlpRewardPool] = _rewardPerToken(_dlpRewardPool, dlpNormal);
 
-		// !! @modify Code added by Eric 20231030
-        // !! @modify Code moved by Eric 20231228
-        pendingBoostReward += boostReward;
-
-		if (_account == address(0)) return;
-
-		userRewards[_dlpRewardPool][_account] = _earned(_account, _dlpRewardPool, 0);
-		userRewardsPerTokenPaid[_dlpRewardPool][_account] = rewardPerTokenStored[_dlpRewardPool];
+		_updateUserVar(_dlpRewardPool, _account);
 	}
 
 	function _lsdUpdateReward(address _account) private {
@@ -325,27 +318,23 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 
 		// esLBR earned from Lybra eUSD mining incentive
         // !! @modify Code added by Eric 20231030
-        (
-        	uint256 lsdNormal, 
-        	uint256 lsdRpt, 
-        	uint256 boostReward, 
-        	uint256 lsdEarned
-        ) = earnedSinceLastUpdate(_miningIncentive);
-		rewardPerTokenPaid[_miningIncentive] = lsdRpt;
-		earnedPaid[_miningIncentive] = lsdEarned;
+        (uint256 lsdNormal, uint256 lsdBoost) = _updateGlobalVar(_miningIncentive);
 
 		if (lsdNormal > 0) {
-			uint256 toTreasury = lsdNormal * treasuryShare / 100;
-			if (toTreasury > 0) userRewards[_miningIncentive][treasury] += toTreasury;
-			// esLBR reward from mining incentive given to dlp stakers
-			uint256 toStaker = lsdNormal * stakerShare / 100;
-			// esLBR reward from mining incentive given to stETH suppliers
-			uint256 toSupplier = lsdNormal - toTreasury - toStaker;
+			(uint256 toStaker, uint256 toSupplier) = _calcRewardShares(lsdNormal);
 
 			rewardPerTokenStored[_dlpRewardPool] = _rewardPerToken(_dlpRewardPool, toStaker);
 			rewardPerTokenStored[_miningIncentive] = _rewardPerToken(_miningIncentive, toSupplier);
+
+			// !! @modify Code added by Eric 20231030
+	        // !! @modify Code moved by Eric 20231228
+	        pendingBoostReward += lsdBoost;
 		}
 
+		_updateUserVar(_miningIncentive, _account);
+	}
+
+	function _eusdUpdateReward(address _account) private {
 		address _eUSD = eUSD;
 		uint256 eusdEarned = matchPool.claimRebase();
 		if (eusdEarned > 0) {
@@ -353,20 +342,53 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 			rewardPerTokenStored[_eUSD] = _rewardPerToken(_eUSD, eusdEarned);
 		}
 
-		// !! @modify Code added by Eric 20231030
-        // !! @modify Code moved by Eric 20231228
-        pendingBoostReward += boostReward;
-
 		if (_account == address(0)) return;
 
-		userRewards[_miningIncentive][_account] = _earned(_account, _miningIncentive, 0);
-		userRewardsPerTokenPaid[_miningIncentive][_account] = rewardPerTokenStored[_miningIncentive];
-
 		(uint256 borrowedAmount,,,) = matchPool.borrowed(address(matchPool.getMintPool()), _account);
-		if (borrowedAmount == 0) userRewards[_eUSD][_account] = _earned(_account, _eUSD, 0);
+		if (borrowedAmount == 0) userRewards[_eUSD][_account] = _earned(_eUSD, _account, 0);
 			// Users who borrowed eUSD will not share rebase reward
-		else userRewards[_eUSD][treasury] += (_earned(_account, _eUSD, 0) - userRewards[_eUSD][_account]);
+		else userRewards[_eUSD][treasury] += (_earned(_eUSD, _account, 0) - userRewards[_eUSD][_account]);
 
 		userRewardsPerTokenPaid[_eUSD][_account] = rewardPerTokenStored[_eUSD];
+	}
+
+	/**
+	 * @dev Update variables for Lybra reward calculation
+	 */
+	function _updateGlobalVar(address _rewardPool) private returns (uint256, uint256) {
+		(
+        	uint256 normalReward, 
+        	uint256 lybraRpt, 
+			uint256 boostReward, 
+        	uint256 lybraEarned
+        ) = earnedSinceLastUpdate(_rewardPool);
+		rewardPerTokenPaid[_rewardPool] = lybraRpt;
+		earnedPaid[_rewardPool] = lybraEarned;
+
+		return (normalReward, boostReward);
+	}
+
+	/**
+	 * @dev Update variables for user reward calculation
+	 */
+	function _updateUserVar(address _rewardPool, address _account) private {
+		if (_account == address(0)) return;
+		userRewards[_rewardPool][_account] = _earned(_rewardPool, _account, 0);
+		userRewardsPerTokenPaid[_rewardPool][_account] = rewardPerTokenStored[_rewardPool];
+	}
+
+	/**
+	 * @dev Divide mining reward to appropriate shares for treasury, stakers, suppliers
+	 */
+	function _calcRewardShares(uint256 _rewardAmount) private returns (
+		uint256 toStaker,
+		uint256 toSupplier
+	) {
+		uint256 toTreasury = _rewardAmount * treasuryShare / 100;
+		if (toTreasury > 0) userRewards[miningIncentive][treasury] += toTreasury;
+		// esLBR reward from mining incentive given to dlp stakers
+		toStaker = _rewardAmount * stakerShare / 100;
+		// esLBR reward from mining incentive given to stETH suppliers
+		toSupplier = _rewardAmount - toTreasury - toStaker;
 	}
 }
