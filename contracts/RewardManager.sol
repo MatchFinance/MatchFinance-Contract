@@ -16,8 +16,6 @@ interface IERC20Mintable {
 
 error Unauthorized();
 error UnpaidInterest(uint256 unpaidAmount);
-error RewardNotOpen();
-error WIP();
 
 contract RewardManager is Initializable, OwnableUpgradeable {
 	IMatchPool public matchPool;
@@ -229,13 +227,11 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 	}
 
 	function getReward(address _rewardPool) external {
-		if (address(mesLBR) == address(0)) revert RewardNotOpen();
-		
 		address _dlpRewardPool = dlpRewardPool;
 		address _miningIncentive = miningIncentive;
 		uint256 rewardAmount;
  
-		if (_rewardPool == dlpRewardPool) {
+		if (_rewardPool == _dlpRewardPool) {
 			_dlpUpdateReward(msg.sender);
 
 			rewardAmount = userRewards[_dlpRewardPool][msg.sender];
@@ -263,8 +259,9 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 			if (rewardAmount > 0) {
 				IERC20 _eUSD = IERC20(eUSD);
 				// Get actual claim amount, including newly rebased eUSD in this contract
-				uint256 actualAmount = _eUSD.balanceOf(address(this)) * userRewards[eUSD][msg.sender] / totalEUSD;
-				userRewards[eUSD][msg.sender] = 0;
+				uint256 actualAmount = _eUSD.balanceOf(address(this)) * 
+					userRewards[address(_eUSD)][msg.sender] / totalEUSD;
+				userRewards[address(_eUSD)][msg.sender] = 0;
 				totalEUSD -= rewardAmount;
 
 				_eUSD.transfer(msg.sender, actualAmount);
@@ -276,8 +273,6 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 	}
 
 	function getAllRewards() external {
-		if (address(mesLBR) == address(0)) revert RewardNotOpen();
-
 		address _dlpRewardPool = dlpRewardPool;
 		address _miningIncentive = miningIncentive;
 		// Update dlp & mining global var, dlp user var
@@ -311,7 +306,6 @@ contract RewardManager is Initializable, OwnableUpgradeable {
     //   - treasury reward to vlMatch stakers (1 distributor)
     //   - protocol revenue to mesLBR stakers (2 distributors)
     function updateRewardDistributors() public {
-        revert WIP();
         // !! @modify Code added by Eric 20231030
         uint256 protocolRevenue = IRewardPool(lybraConfigurator.getProtocolRewardsPool()).earned(address(matchPool));
 
