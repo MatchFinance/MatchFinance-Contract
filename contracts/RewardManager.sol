@@ -124,7 +124,6 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 		if (_rewardPool == dlpRewardPool) rewardAmount = dlpEarned + lsdEarned * stakerShare / 100;
 		else if (_rewardPool == miningIncentive) 
 			rewardAmount = lsdEarned * (100 - stakerShare - treasuryShare) / 100;
-		else return 0;
 
 		return _rewardPerToken(_rewardPool, rewardAmount);
 	}
@@ -136,7 +135,6 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 		if (_rewardPool == dlpRewardPool) rewardAmount = dlpEarned + lsdEarned * stakerShare / 100;
 		else if (_rewardPool == miningIncentive) 
 			rewardAmount = lsdEarned * (100 - stakerShare - treasuryShare) / 100;
-		else return 0;
 
 		return _earned(_rewardPool, _account, rewardAmount);
 	}
@@ -350,7 +348,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
         // Mint boost reward mesLBR to reward distributor
         // Reward token: mesLBR
         // Receiver: mesLBR staking contract
-        address boostReceiver = IRewardDistributorFactory(rewardDistributorFactory).distributors(
+        address boostReceiver = rewardDistributorFactory.distributors(
             address(mesLBR),
             mesLBRStaking
         );
@@ -360,7 +358,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
         // Transfer treasury reward to reward distributor for vlMatch staking
         // Reward token: mesLBR
         // Receiver: vlMatch staking contract
-        address treasuryReceiver = IRewardDistributorFactory(rewardDistributorFactory).distributors(
+        address treasuryReceiver = rewardDistributorFactory.distributors(
             address(mesLBR),
             vlMatchStaking
         );
@@ -380,14 +378,14 @@ contract RewardManager is Initializable, OwnableUpgradeable {
         // ! --------------------
         // ! 20240112 Need to ensure the distributor contract exists or we will transfer to zero address
         // ! If Lybra changes the altStablecoin we need to add a new distributor (no change in this contract)
-        address peUSDReceiver = IRewardDistributorFactory(rewardDistributorFactory).distributors(
+        address peUSDReceiver = rewardDistributorFactory.distributors(
             peUSD,
             mesLBRStaking
         );
         require(peUSDReceiver != address(0), "No peUSD distributor");
         IERC20(peUSD).transfer(peUSDReceiver, peUSDBalance);
 
-        address altStablecoinReceiver = IRewardDistributorFactory(rewardDistributorFactory).distributors(
+        address altStablecoinReceiver = rewardDistributorFactory.distributors(
             altStablecoin,
             mesLBRStaking
         );
