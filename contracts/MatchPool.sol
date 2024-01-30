@@ -632,6 +632,16 @@ contract MatchPool is Initializable, OwnableUpgradeable {
         IMining(lybraConfigurator.eUSDMiningIncentives()).getReward();
     }
 
+    // !! @modify Code added by Eric 20231228
+    // !!         Remove access control
+    function claimProtocolRevenue() external {
+        IConfigurator config = lybraConfigurator;
+
+        IRewardPool(config.getProtocolRewardsPool()).getReward();
+        _sendRevenue(config.peUSD());
+        _sendRevenue(config.stableToken());
+    }
+
     /**
      * @notice Get max. amount of eUSD that can be borrowed given amount of stETH supplied
      */
@@ -786,6 +796,10 @@ contract MatchPool is Initializable, OwnableUpgradeable {
 
         mintPool.burn(address(this), _amount);
         totalMinted[mintPoolAddress] -= _amount;
+    }
+
+    function _sendRevenue(address _token) private {
+        IERC20(_token).safeTransfer(address(rewardManager), IERC20(_token).balanceOf(address(this)));
     }
 
     function _max(uint256 x, uint256 y) private pure returns (uint256) {

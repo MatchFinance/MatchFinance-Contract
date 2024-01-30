@@ -48,6 +48,7 @@ interface IRewardPool {
     function rewardPerToken() external view returns (uint256);
     function earned(address _account) external view returns (uint256);
     function refreshReward(address _account) external;
+    function getReward() external;
 }
 
 interface IEUSD {
