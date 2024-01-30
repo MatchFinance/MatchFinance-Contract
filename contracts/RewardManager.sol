@@ -8,6 +8,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import "./interfaces/LybraInterfaces.sol";
 import "./interfaces/IMatchPool.sol";
+import "./interfaces/IRewardDistributorFactory.sol";
 
 interface IERC20Mintable {
 	function mint(address _to, uint256 _amount) external;
@@ -16,6 +17,7 @@ interface IERC20Mintable {
 error Unauthorized();
 error UnpaidInterest(uint256 unpaidAmount);
 error RewardNotOpen();
+error WIP();
 
 contract RewardManager is Initializable, OwnableUpgradeable {
 	IMatchPool public matchPool;
@@ -54,13 +56,31 @@ contract RewardManager is Initializable, OwnableUpgradeable {
     // reward pool => last updated earned() amount from Lybra
 	mapping(address => uint256) public earnedPaid;
 
+	// !! @modify Eric 20231030
+    address public mesLBRStaking;
+    address public vlMatchStaking;
+
+    IConfigurator public lybraConfigurator;
+
+    IRewardDistributorFactory public rewardDistributorFactory;
+
 	event dlpRewardPoolChanged(address newPool);
 	event MiningRewardPoolsChanged(address newMining, address newEUSD);
 	event RewardShareChanged(uint128 newTreasuryShare, uint128 newStakerShare);
 	event TreasuryChanged(address newTreasury);
 	event mesLBRChanged(address newMesLBR);
+	event mesLBRStakingPoolChanged(address newPool);
+	event vlMatchStakingChanged(address newPool);
+	event LybraConfiguratorChanged(address newConfigurator);
+	event RewardDistributorFactoryChanged(address newFactory);
 	event mesLBRRewardClaimed(address account, uint256 rewardAmount);
 	event eUSDRewardClaimed(address account, uint256 rewardAmount);
+	event RewardDistributedToDistributors(
+        uint256 boostReward,
+        uint256 treasuryReward,
+        uint256 peUSDAmount,
+        uint256 altStablecoinAmount
+    );
 
 	function initializeTest(address _matchPool) public initializer {
 		__Ownable_init();
@@ -154,6 +174,26 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 
 		emit mesLBRChanged(_mesLBR);
 	}
+
+	function setMesLBRStakingPool(address _mesLBRStaking) external onlyOwner {
+        mesLBRStaking = _mesLBRStaking;
+        emit mesLBRStakingPoolChanged(_mesLBRStaking);
+    }
+
+    function setVlMatchStaking(address _vlMatchStaking) external onlyOwner {
+    	vlMatchStaking = _vlMatchStaking;
+    	emit vlMatchStakingChanged(_vlMatchStaking);
+    }
+
+    function setLybraConfigurator(address _lybraConfigurator) external onlyOwner {
+        lybraConfigurator = IConfigurator(_lybraConfigurator);
+        emit LybraConfiguratorChanged(_lybraConfigurator);
+    }
+
+    function setRewardDistributorFactory(address _factory) external onlyOwner {
+    	rewardDistributorFactory = IRewardDistributorFactory(_factory);
+    	emit RewardDistributorFactoryChanged(_factory);
+    }
 	
 	// Update rewards for dlp stakers, includes esLBR from dlp and eUSD
 	function dlpUpdateReward(address _account) external {
@@ -264,6 +304,105 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 		emit eUSDRewardClaimed(msg.sender, rewardAmount);
 	}
 
+	// ! We can call this function periodically to update reward distributors
+    // Update and distribute the reward to several distributors
+    // Includes:
+    //   - boost reward to mesLBR stakers (1 distributor)
+    //   - treasury reward to vlMatch stakers (1 distributor)
+    //   - protocol revenue to mesLBR stakers (2 distributors)
+    function updateRewardDistributors() public {
+        revert WIP();
+        // !! @modify Code added by Eric 20231030
+        uint256 protocolRevenue = IRewardPool(lybraConfigurator.getProtocolRewardsPool()).earned(address(matchPool));
+
+        // Get peUSD(or peUSD & USDC)
+        // Protocol revenue will first goes to this contract
+        // In lybra protocol revenue cotract, it will give peUSD if it is enough,
+        // if it is not enough, it will give peUSD + altStablecoin.
+        // But it will not tell you the amount of each token.
+        if (protocolRevenue > 0) {
+            IMatchPool(matchPool).claimProtocolRevenue();
+        }
+
+        // Distribute treasury reward part to distributors, for vlMatch staking
+        uint256 rewardToTreasury = userRewards[miningIncentive][treasury];
+        userRewards[miningIncentive][treasury] = 0;
+
+        // !! @modify Code added by Eric 20231030
+        // pendingBoostReward has been updated in the previous "getReward" funciton inside "getAllRewards"
+        if (pendingBoostReward > 0) {
+            _distributeRewardToDistributors(pendingBoostReward, rewardToTreasury);
+
+            // delete this buffer
+            pendingBoostReward = 0;
+        } else _distributeRewardToDistributors(0, rewardToTreasury);
+    }
+
+    /**
+     * @notice Distribute the reward to corresponding distributor contracts
+     *
+     * @dev    Total mesLBR Reward: 150 = boost reward (50) + treasury reward (100)
+     *
+     *         Boost Reward to:
+     *         1) mesLBR staking (40)
+     *
+     *         Treasury Reward to:
+     *         1) vlMatch staking (10)
+     *
+     *         peUSD / altStablecoin to:
+     *         1) mesLBR staking
+     */
+    function _distributeRewardToDistributors(uint256 _boostReward, uint256 _treasuryReward) internal {
+        // Mint boost reward mesLBR to reward distributor
+        // Reward token: mesLBR
+        // Receiver: mesLBR staking contract
+        address boostReceiver = IRewardDistributorFactory(rewardDistributorFactory).distributors(
+            address(mesLBR),
+            mesLBRStaking
+        );
+        require(boostReceiver != address(0), "Invalid distributor");
+        mesLBR.mint(boostReceiver, _boostReward);
+
+        // Transfer treasury reward to reward distributor for vlMatch staking
+        // Reward token: mesLBR
+        // Receiver: vlMatch staking contract
+        address treasuryReceiver = IRewardDistributorFactory(rewardDistributorFactory).distributors(
+            address(mesLBR),
+            vlMatchStaking
+        );
+        require(treasuryReceiver != address(0), "Invalid distributor");
+        mesLBR.mint(treasuryReceiver, _treasuryReward);
+
+        // Transfer stablecoin protocol revenue to reward distributor
+        address peUSD = lybraConfigurator.peUSD();
+        address altStablecoin = lybraConfigurator.stableToken();
+
+        uint256 peUSDBalance = IERC20(peUSD).balanceOf(address(this));
+        uint256 altStablecoinBalance = IERC20(altStablecoin).balanceOf(address(this));
+
+        // ! Transfer all peUSD and altStablecoin to their distributors
+        // ! It seems proper for now
+        // ! All peUSD and altStablecoin inside this contract is from protocol revenue
+        // ! --------------------
+        // ! 20240112 Need to ensure the distributor contract exists or we will transfer to zero address
+        // ! If Lybra changes the altStablecoin we need to add a new distributor (no change in this contract)
+        address peUSDReceiver = IRewardDistributorFactory(rewardDistributorFactory).distributors(
+            peUSD,
+            mesLBRStaking
+        );
+        require(peUSDReceiver != address(0), "No peUSD distributor");
+        IERC20(peUSD).transfer(peUSDReceiver, peUSDBalance);
+
+        address altStablecoinReceiver = IRewardDistributorFactory(rewardDistributorFactory).distributors(
+            altStablecoin,
+            mesLBRStaking
+        );
+        require(altStablecoinReceiver != address(0), "No altStablecoin distributor");
+        IERC20(altStablecoin).transfer(altStablecoinReceiver, altStablecoinBalance);
+
+        emit RewardDistributedToDistributors(_boostReward, _treasuryReward, peUSDBalance, altStablecoinBalance);
+    }
+
 	function _rewardPerToken(address _rewardPool, uint256 _rewardAmount) private view returns (uint256) {
 		uint256 rptStored = rewardPerTokenStored[_rewardPool];
 		uint256 totalToken;
@@ -294,7 +433,8 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 		address _dlpRewardPool = dlpRewardPool;
 		address _miningIncentive = miningIncentive;
 
-		(uint256 dlpNormal, uint256 dlpBoost) = _updateGlobalVar(_dlpRewardPool);
+		// dLP stake pool does not have boost reward
+		(uint256 dlpNormal,) = _updateGlobalVar(_dlpRewardPool);
 		(uint256 lsdNormal, uint256 lsdBoost) = _updateGlobalVar(_miningIncentive);
 
 		if (lsdNormal > 0) {

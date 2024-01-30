@@ -14,4 +14,6 @@ interface IMatchPool {
 	function claimRebase() external returns (uint256);
 	function borrowed(address _mintPool, address _account) external view returns (uint256, uint256, uint256, uint256);
 	function claimRewards() external;
+	// !! @modify Code added by Eric 20231030
+    function claimProtocolRevenue() external;
 }

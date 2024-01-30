@@ -34,6 +34,9 @@ interface IConfigurator {
     function getEUSDAddress() external view returns (address);
     function refreshMintReward(address _account) external;
     function eUSDMiningIncentives() external view returns (address);
+    function getProtocolRewardsPool() external view returns (address);
+    function peUSD() external view returns (address);
+    function stableToken() external view returns (address);
 }
 
 // eUSD mining incentive, dlp stake reward pool
