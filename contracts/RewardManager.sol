@@ -129,14 +129,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 	}
 
 	function earned(address _account, address _rewardPool) public view returns (uint256) {
-		(uint256 dlpEarned, , , ) = earnedSinceLastUpdate(dlpRewardPool);
-		(uint256 lsdEarned, , , ) = earnedSinceLastUpdate(miningIncentive);
-		uint256 rewardAmount;
-		if (_rewardPool == dlpRewardPool) rewardAmount = dlpEarned + lsdEarned * stakerShare / 100;
-		else if (_rewardPool == miningIncentive) 
-			rewardAmount = lsdEarned * (100 - stakerShare - treasuryShare) / 100;
-
-		return _earned(_rewardPool, _account, rewardAmount);
+		return _earned(_rewardPool, _account, rewardPerToken(_rewardPool));
 	}
 
 	function setDlpRewardPool(address _dlp) external onlyOwner {
@@ -409,7 +402,7 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 	function _earned(
 		address _rewardPool,
 		address _account,
-		uint256 _rewardAmount
+		uint256 _rpt
 	) private view returns (uint256) {
 		uint256 share;
 		if (_rewardPool == dlpRewardPool) share = matchPool.staked(_account);
@@ -417,8 +410,8 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 		if (_rewardPool == miningIncentive || _rewardPool == eUSD) 
 			share = matchPool.supplied(address(matchPool.getMintPool()), _account);
 
-		return share * (_rewardPerToken(_rewardPool, _rewardAmount) - 
-			userRewardsPerTokenPaid[_rewardPool][_account]) / 1e18 + userRewards[_rewardPool][_account];
+		return share * (_rpt - userRewardsPerTokenPaid[_rewardPool][_account]) / 1e18 + 
+			userRewards[_rewardPool][_account];
 	}
 
 	function _dlpUpdateReward(address _account) private {
@@ -476,12 +469,13 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 
 		if (_account == address(0)) return;
 
+		uint256 rpt = rewardPerTokenStored[_eUSD];
 		(uint256 borrowedAmount,,,) = matchPool.borrowed(address(matchPool.getMintPool()), _account);
-		if (borrowedAmount == 0) userRewards[_eUSD][_account] = _earned(_eUSD, _account, 0);
+		if (borrowedAmount == 0) userRewards[_eUSD][_account] = _earned(_eUSD, _account, rpt);
 			// Users who borrowed eUSD will not share rebase reward
-		else userRewards[_eUSD][treasury] += (_earned(_eUSD, _account, 0) - userRewards[_eUSD][_account]);
+		else userRewards[_eUSD][treasury] += (_earned(_eUSD, _account, rpt) - userRewards[_eUSD][_account]);
 
-		userRewardsPerTokenPaid[_eUSD][_account] = rewardPerTokenStored[_eUSD];
+		userRewardsPerTokenPaid[_eUSD][_account] = rpt;
 	}
 
 	/**
@@ -505,8 +499,9 @@ contract RewardManager is Initializable, OwnableUpgradeable {
 	 */
 	function _updateUserVar(address _rewardPool, address _account) private {
 		if (_account == address(0)) return;
-		userRewards[_rewardPool][_account] = _earned(_rewardPool, _account, 0);
-		userRewardsPerTokenPaid[_rewardPool][_account] = rewardPerTokenStored[_rewardPool];
+		uint256 rpt = rewardPerTokenStored[_rewardPool];
+		userRewards[_rewardPool][_account] = _earned(_rewardPool, _account, rpt);
+		userRewardsPerTokenPaid[_rewardPool][_account] = rpt;
 	}
 
 	/**
