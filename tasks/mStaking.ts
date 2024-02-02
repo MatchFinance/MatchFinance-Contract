@@ -76,17 +76,37 @@ task("setRewardSpeed", async (_, hre) => {
 
   const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
   const mesLBR = "0x0aF0E83D064f160376303ac67DD9A7971AF88d4C";
+  const peUSD = "0xD585aaafA2B58b1CD75092B51ade9Fa4Ce52F247";
+
+  const mesLBRStaking = "0x3580386F5366614F0F52ED34C9bF66BA50a91461";
   const vlMatchStaking = "0x7D027083e55724A1082b8cDC51eE90781f41Ff14";
 
-  const distributor_USDC = "0x0F6362a9D06976FB0D69922758200c886E9e5C0e";
-  const distributor_mesLBR = "0xA93AF92e800581e83207491F477Dc78AF196EC1B";
+  // const distributor_USDC = "0x0F6362a9D06976FB0D69922758200c886E9e5C0e";
+  // const distributor_mesLBR = "0xA93AF92e800581e83207491F477Dc78AF196EC1B";
 
-  const rewardSpeed = ethers.utils.parseUnits("0.00248", 18); // 1500 / week
+  const distributor_mesLBR = "0x84F5e03fd93805617BAd908d876aDd97d5750564";
+  const distributor_peUSD = "0x4C33442D9Ad3fCa1b74a56db61eA492359F997Ec";
+
+  const rewardSpeed = ethers.utils.parseUnits("0.0008267", 18); // 1500 / week
   console.log("rewardSpeed: ", rewardSpeed.toString());
 
-  const tx = await factory.setRewardSpeed(mesLBR, vlMatchStaking, rewardSpeed);
+  const tx = await factory.setRewardSpeed(peUSD, mesLBRStaking, rewardSpeed);
   console.log(tx.hash);
 });
+
+task("distributeReward", async (_, hre) => {
+  const { network, ethers } = hre;
+  const addressList = readMTokenAddressList();
+
+  const [dev] = await ethers.getSigners();
+
+  const rewardManager = await ethers.getContractAt(
+    "RewardManager",
+    addressList[network.name].RewardManager,
+  );
+
+  const tx = await rewardManager.updateRewardDistributors();
+})
 
 task("mintMesLBR", async (_, hre) => {
   const { network, ethers } = hre;

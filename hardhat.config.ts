@@ -15,10 +15,10 @@ dotenvConfig({ path: resolve(__dirname, dotenvConfigPath) });
 
 // Ensure that we have all the environment variables we need.
 const mnemonic: string | undefined = process.env.MNEMONIC;
-const privateKey: string | undefined = process.env.PRIVATE_KEY;
+// const privateKey: string | undefined = process.env.PRIVATE_KEY;
 
 // I use this line for my own pk for deploying mtoken related contracts
-// const privateKey: string | undefined = process.env.PK_MATCH;
+const privateKey: string | undefined = process.env.PK_MATCH;
 
 if (!privateKey) {
   throw new Error("Please set your PRIVATE_KEY in a .env file");
