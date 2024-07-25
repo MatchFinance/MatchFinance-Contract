@@ -84,10 +84,14 @@ task("setRewardSpeed", async (_, hre) => {
   // const distributor_USDC = "0x0F6362a9D06976FB0D69922758200c886E9e5C0e";
   // const distributor_mesLBR = "0xA93AF92e800581e83207491F477Dc78AF196EC1B";
 
-  const distributor_mesLBR = "0x84F5e03fd93805617BAd908d876aDd97d5750564";
+  // const distributor_mesLBR = "0x84F5e03fd93805617BAd908d876aDd97d5750564";
   const distributor_peUSD = "0x4C33442D9Ad3fCa1b74a56db61eA492359F997Ec";
 
-  const rewardSpeed = ethers.utils.parseUnits("0.0008267", 18); // 1500 / week
+  // const d = await ethers.getContractAt("RewardDistributor", distributor_peUSD);
+  // const  s = await d.speed();
+  // console.log("speed: ", s.toString());
+
+  const rewardSpeed = ethers.utils.parseUnits("0", 18); // 1500 / week
   console.log("rewardSpeed: ", rewardSpeed.toString());
 
   const tx = await factory.setRewardSpeed(peUSD, mesLBRStaking, rewardSpeed);
