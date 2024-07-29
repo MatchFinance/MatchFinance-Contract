@@ -49,6 +49,10 @@ interface IRewardPool {
     function earned(address _account) external view returns (uint256);
     function refreshReward(address _account) external;
     function getReward() external;
+    
+    function withdraw(address user) external;
+    function getClaimAbleLBR(address user) external view returns(uint256);
+    function unstake(uint256 amount) external;
 }
 
 interface IEUSD {
